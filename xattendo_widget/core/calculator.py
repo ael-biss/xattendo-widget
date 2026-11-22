@@ -292,6 +292,67 @@ def calculate_daily_average_target(
     )
 
 
+def format_eta_clock(now_ts: float, remaining_seconds: float) -> str:
+    """Return local campus HH:MM clock time when remaining_seconds will be reached."""
+    target_dt = campus_now(datetime.datetime.fromtimestamp(now_ts, campus_zone())) + datetime.timedelta(
+        seconds=max(0.0, float(remaining_seconds))
+    )
+    return target_dt.strftime('%H:%M')
+
+
+def build_day_active_segments(
+    local: LocalTrackerSnapshot,
+    now_ts: Optional[float] = None,
+) -> Tuple[float, float, List[Tuple[float, float]], float]:
+    """Build today's unlocked active intervals [(start_ts, end_ts), ...] and timeline window."""
+    ts = float(now_ts if now_ts is not None else local.now_ts)
+    zone = campus_zone()
+    now_dt = campus_now(datetime.datetime.fromtimestamp(ts, zone))
+    day_start_dt = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start = day_start_dt.timestamp()
+    day_end = (day_start_dt + datetime.timedelta(days=1)).timestamp()
+
+    # Default 08:00 -> 20:00 window; expand in 2h steps if sessions or now fall outside
+    start_hour = 8
+    end_hour = 20
+    if now_dt.hour >= 20:
+        end_hour = min(24, ((now_dt.hour // 2) + 1) * 2)
+
+    active_segments: List[Tuple[float, float]] = []
+    for sess in local.recent_sessions:
+        s_end = ts if sess.live else min(float(sess.end_ts), ts)
+        lo = max(float(sess.start_ts), day_start)
+        hi = min(s_end, ts, day_end)
+        if hi <= lo:
+            continue
+
+        s_dt = campus_now(datetime.datetime.fromtimestamp(lo, zone))
+        if s_dt.hour < start_hour:
+            start_hour = max(0, (s_dt.hour // 2) * 2)
+
+        locks = clip_and_merge_intervals(
+            [(float(iv[0]), (float(iv[1]) if iv[1] is not None else None)) for iv in sess.intervals],
+            lo,
+            hi,
+        )
+        cursor = lo
+        for lk_a, lk_b in locks:
+            if lk_a > cursor:
+                active_segments.append((cursor, lk_a))
+            cursor = max(cursor, lk_b)
+        if hi > cursor:
+            active_segments.append((cursor, hi))
+
+    win_start = (day_start_dt + datetime.timedelta(hours=start_hour)).timestamp()
+    win_end = (day_start_dt + datetime.timedelta(hours=end_hour)).timestamp()
+    clipped_segs = [
+        (max(a, win_start), min(b, win_end))
+        for a, b in sorted(active_segments)
+        if min(b, win_end) > max(a, win_start)
+    ]
+    return (win_start, win_end, clipped_segs, ts)
+
+
 def build_simulated_local_and_linked(
     mode: str,
     now_ts: Optional[float] = None,

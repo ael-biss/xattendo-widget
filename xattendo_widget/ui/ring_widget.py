@@ -1,11 +1,15 @@
-"""Cairo-rendered circular radial progress ring widget for the pill."""
+"""Cairo-rendered circular progress ring, daily activity timeline, and 7-day bar widgets."""
 
+import datetime
 import math
+from typing import List, Tuple
 
 import cairo
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
+
+from xattendo_widget.core.calculator import campus_now, campus_zone
 
 
 class ProgressRing(Gtk.DrawingArea):
@@ -82,4 +86,135 @@ class ProgressRing(Gtk.DrawingArea):
         # Center dot
         ctx.arc(cx, cy, max(1.8, dim * 0.14), 0, 2.0 * math.pi)
         ctx.fill()
+        return False
+
+
+def _rounded_rect(ctx: cairo.Context, x: float, y: float, w: float, h: float, r: float) -> None:
+    r = min(r, w / 2.0, h / 2.0)
+    if r <= 0 or w <= 0 or h <= 0:
+        return
+    ctx.new_sub_path()
+    ctx.arc(x + w - r, y + r, r, -math.pi / 2.0, 0)
+    ctx.arc(x + w - r, y + h - r, r, 0, math.pi / 2.0)
+    ctx.arc(x + r, y + h - r, r, math.pi / 2.0, math.pi)
+    ctx.arc(x + r, y + r, r, math.pi, 1.5 * math.pi)
+    ctx.close_path()
+
+
+class DayTimeline(Gtk.DrawingArea):
+    """Horizontal daily activity timeline with sky-blue active blocks and green 'now' marker."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._win_start: float = 0.0
+        self._win_end: float = 1.0
+        self._segments: List[Tuple[float, float]] = []
+        self._now_ts: float = 0.0
+        self.set_size_request(-1, 40)
+        self.connect('draw', self._on_draw)
+
+    def set_timeline(
+        self,
+        win_start: float,
+        win_end: float,
+        segments: List[Tuple[float, float]],
+        now_ts: float,
+    ) -> None:
+        self._win_start = float(win_start)
+        self._win_end = max(float(win_start) + 1.0, float(win_end))
+        self._segments = list(segments)
+        self._now_ts = float(now_ts)
+        self.queue_draw()
+
+    def _on_draw(self, _widget, ctx: cairo.Context) -> bool:
+        w = float(self.get_allocated_width())
+        h = float(self.get_allocated_height())
+        if w <= 10 or h <= 10:
+            return False
+
+        bar_h = 22.0
+        span = max(1.0, self._win_end - self._win_start)
+
+        # Background track
+        ctx.set_source_rgb(0.137, 0.180, 0.247)  # #232e3f
+        _rounded_rect(ctx, 0.0, 0.0, w, bar_h, 5.0)
+        ctx.fill()
+
+        # Active sky-blue blocks
+        ctx.set_source_rgb(0.294, 0.722, 0.941)  # #4bb8f0
+        for a, b in self._segments:
+            x1 = max(0.0, min(w, ((a - self._win_start) / span) * w))
+            x2 = max(0.0, min(w, ((b - self._win_start) / span) * w))
+            seg_w = max(2.0, x2 - x1)
+            if x1 + seg_w > w:
+                seg_w = max(1.0, w - x1)
+            _rounded_rect(ctx, x1, 0.0, seg_w, bar_h, 4.0)
+            ctx.fill()
+
+        # Green 'now' marker
+        if self._win_start <= self._now_ts <= self._win_end:
+            nx = ((self._now_ts - self._win_start) / span) * w
+            nx = max(1.0, min(w - 2.0, nx))
+            ctx.set_source_rgb(0.204, 0.827, 0.600)  # #34d399
+            ctx.rectangle(nx - 1.0, 0.0, 2.0, bar_h)
+            ctx.fill()
+
+        # Time tick labels
+        zone = campus_zone()
+        ctx.select_font_face('DejaVu Sans Mono', cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+        ctx.set_font_size(10.0)
+        ctx.set_source_rgb(0.392, 0.455, 0.545)  # #64748b
+
+        for idx in range(4):
+            frac = idx / 3.0
+            tick_ts = self._win_start + frac * span
+            label = campus_now(datetime.datetime.fromtimestamp(tick_ts, zone)).strftime('%H:%M')
+            ext = ctx.text_extents(label)
+            if idx == 0:
+                tx = 0.0
+            elif idx == 3:
+                tx = max(0.0, w - ext.width)
+            else:
+                tx = max(0.0, min(w - ext.width, frac * w - ext.width / 2.0))
+            ctx.move_to(tx, bar_h + 13.0)
+            ctx.show_text(label)
+
+        return False
+
+
+class CountedDaysBar(Gtk.DrawingArea):
+    """7-segment horizontal progress indicator for counted Attendo days."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._counted = 0
+        self._total = 7
+        self.set_size_request(-1, 6)
+        self.connect('draw', self._on_draw)
+
+    def set_days(self, counted: int, total: int = 7) -> None:
+        self._counted = max(0, int(counted))
+        self._total = max(1, int(total))
+        self.queue_draw()
+
+    def _on_draw(self, _widget, ctx: cairo.Context) -> bool:
+        w = float(self.get_allocated_width())
+        h = float(self.get_allocated_height())
+        if w <= 10 or h <= 2:
+            return False
+
+        gap = 4.0
+        seg_h = min(4.0, h)
+        y = (h - seg_h) / 2.0
+        seg_w = max(4.0, (w - gap * (self._total - 1)) / self._total)
+
+        for i in range(self._total):
+            x = i * (seg_w + gap)
+            if i < self._counted:
+                ctx.set_source_rgb(0.294, 0.722, 0.941)  # #4bb8f0
+            else:
+                ctx.set_source_rgb(0.153, 0.204, 0.275)  # #273446
+            _rounded_rect(ctx, x, y, seg_w, seg_h, 2.0)
+            ctx.fill()
+
         return False

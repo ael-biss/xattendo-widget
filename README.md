@@ -37,3 +37,14 @@ make sim-locked    # Simulate locked workstation (amber)
 make sim-done      # Simulate period target reached (green)
 make sim-unlinked  # Simulate local session with unlinked Intra & Attendo
 ```
+
+## Publishing Updates
+
+1. Bump `__version__` in `xattendo_widget/__init__.py`.
+2. Commit and push a version tag:
+   ```bash
+   git tag -a v1.0.0 -m "Release v1.0.0"
+   git push origin main --tags
+   ```
+3. GitHub Actions automatically builds `dist/xattendo-widget.pyz` and publishes the release.
+

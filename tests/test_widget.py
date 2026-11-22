@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from xattendo_widget.constants import ALERT_ICON_PATH, DEFAULT_ICON_PATH, DONE_ICON_PATH
 from xattendo_widget.core.calculator import (
     attendo_period_bounds,
+    build_day_active_segments,
     build_simulated_local_and_linked,
     calculate_daily_average_target,
     calculate_expected_recorded_hours,
@@ -25,6 +26,7 @@ from xattendo_widget.core.calculator import (
     compute_effective_today_metrics,
     format_compact_hours,
     format_dec_hours,
+    format_eta_clock,
     format_hm,
     format_hms,
     merge_period_progress,
@@ -115,6 +117,7 @@ class TestXattendoWidget(unittest.TestCase):
         if not os.environ.get('DISPLAY'):
             self.skipTest('No DISPLAY available')
         from run import AppController
+        from xattendo_widget import __version__
         from xattendo_widget.ui.styles import install_css
 
         install_css()
@@ -123,10 +126,15 @@ class TestXattendoWidget(unittest.TestCase):
             try:
                 pill = ctrl.pill
                 self.assertIsNotNone(pill)
+                self.assertEqual(pill.popup_win.version_lbl.get_text(), f'v{__version__}')
                 self.assertEqual(pill.name_lbl.get_visible(), expect_done)
                 self.assertEqual(pill.ring_widget._state, 'done' if expect_done else 'active')
                 pill.popup_win.toggle_near(pill, pill.local_snapshot, pill.linked_state)
                 self.assertTrue(pill.popup_win.get_visible())
+                pill.popup_win._switch_page('sessions')
+                self.assertEqual(pill.popup_win.stack.get_visible_child_name(), 'sessions')
+                pill.popup_win._switch_page('overview')
+                self.assertEqual(pill.popup_win.stack.get_visible_child_name(), 'overview')
                 pill.popup_win.hide()
                 if mode == 'active':
                     pill.history_win.open_window(pill.local_snapshot, pill.linked_state)
@@ -358,6 +366,21 @@ class TestXattendoWidget(unittest.TestCase):
         d_unlinked = calculate_daily_average_target(local_u, None, 2.0 * 3600.0, fallback_target_hours=30.0)
         self.assertGreater(d_unlinked.daily_target_seconds, 0.0)
         self.assertFalse(d_unlinked.done)
+
+    def test_eta_and_day_active_segments(self):
+        # 14:00 + 2h 49m = 16:49
+        now_dt = datetime.datetime(2026, 11, 22, 14, 0, 0, tzinfo=datetime.timezone.utc)
+        eta = format_eta_clock(now_dt.timestamp(), 2 * 3600 + 49 * 60)
+        self.assertEqual(eta, '16:49')
+
+        local, _ = build_simulated_local_and_linked('active', now_ts=now_dt.timestamp())
+        w_start, w_end, segs, ts = build_day_active_segments(local, now_ts=now_dt.timestamp())
+        self.assertLess(w_start, w_end)
+        self.assertEqual(ts, now_dt.timestamp())
+        # Session has a lock interval in the middle, so it splits into 2 active blocks
+        self.assertEqual(len(segs), 2)
+        total_active = sum(b - a for a, b in segs)
+        self.assertAlmostEqual(total_active, local.current_session.net_sec, places=1)
 
     def test_attendo_period_bounds_thu_wed(self):
         # Sunday 2026-11-22 -> Thu 2026-11-19 to Wed 2026-11-25

@@ -111,13 +111,31 @@ window.xattendo-window {
     font-size: 11.5px;
 }
 
-/* Popup & Card Surfaces (Screenshot 2 aesthetic) */
+/* Popup & Card Surfaces (Minimalist 42 Logtime mockup) */
 .xattendo-card {
-    background-color: #090c10;
-    border: 1px solid #243040;
+    background-color: #10151c;
+    border: 1px solid #24303e;
     border-radius: 16px;
-    padding: 15px;
-    color: #f0f6fc;
+    padding: 0px;
+    color: #e8eef5;
+}
+
+.xattendo-card-body {
+    padding: 14px 14px 12px 14px;
+}
+
+.xattendo-panel {
+    background-color: #18202c;
+    border: 1px solid #232e3d;
+    border-radius: 12px;
+    padding: 13px 14px;
+}
+
+.xattendo-inset-card {
+    background-color: #10151c;
+    border: 1px solid #1e2734;
+    border-radius: 10px;
+    padding: 9px 10px;
 }
 
 .xattendo-section {
@@ -128,19 +146,19 @@ window.xattendo-window {
 }
 
 .xattendo-mini-card {
-    background-color: #11161d;
-    border: 1px solid #202833;
-    border-radius: 10px;
-    padding: 9px 11px;
+    background-color: #18202c;
+    border: 1px solid #232e3d;
+    border-radius: 12px;
+    padding: 12px 13px;
 }
 
 .xattendo-badge-42 {
-    background-color: #f0f6fc;
-    color: #090c10;
+    background-color: #e8eef5;
+    color: #0d1218;
     font-weight: 900;
-    font-size: 12px;
-    border-radius: 6px;
-    padding: 4px 7px;
+    font-size: 13px;
+    border-radius: 8px;
+    padding: 6px 8px;
 }
 
 .xattendo-title {
@@ -149,17 +167,34 @@ window.xattendo-window {
     color: #f0f6fc;
 }
 
+.xattendo-version-tag {
+    font-family: "JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #8b97a8;
+    background-color: #18202c;
+    border: 1px solid #263344;
+    border-radius: 6px;
+    padding: 1px 5px;
+}
+
 .xattendo-subtitle {
     font-family: "JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
     font-size: 11px;
-    color: #7d8590;
+    color: #8b97a8;
 }
 
 .xattendo-section-title {
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.6px;
-    color: #7d8590;
+    color: #8b97a8;
+}
+
+.xattendo-panel-label {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #94a3b8;
 }
 
 .xattendo-field-label {
@@ -170,7 +205,67 @@ window.xattendo-window {
 
 .xattendo-hint {
     font-size: 11px;
-    color: #7d8590;
+    color: #8b97a8;
+}
+
+.xattendo-pace-text {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.xattendo-big-metric {
+    font-size: 20px;
+    font-weight: 700;
+    color: #f0f6fc;
+}
+
+.xattendo-header-icon-btn {
+    background-image: none;
+    background-color: transparent;
+    color: #8b97a8;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 4px 6px;
+    min-height: 26px;
+    min-width: 26px;
+    font-size: 13px;
+    box-shadow: none;
+}
+
+.xattendo-header-icon-btn:hover {
+    background-color: #1c2634;
+    color: #f0f6fc;
+}
+
+.xattendo-header-icon-btn.pinned {
+    color: #4bb8f0;
+    background-color: #132538;
+}
+
+.xattendo-bottom-nav {
+    border-top: 1px solid #222d3b;
+}
+
+.xattendo-nav-btn {
+    background-image: none;
+    background-color: transparent;
+    color: #8b97a8;
+    border: none;
+    border-top: 2px solid transparent;
+    border-radius: 0px;
+    padding: 11px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: none;
+}
+
+.xattendo-nav-btn:hover {
+    color: #e8eef5;
+}
+
+.xattendo-nav-btn.active {
+    color: #4bb8f0;
+    border-top: 2px solid #4bb8f0;
 }
 
 /* Header Status Pill */
@@ -217,9 +312,9 @@ window.xattendo-window {
 
 .xattendo-hero-clock {
     font-family: "JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
-    font-size: 29px;
+    font-size: 33px;
     font-weight: 800;
-    color: #b8f4ff;
+    color: #e8eef5;
 }
 
 .xattendo-decimal-badge {
@@ -290,21 +385,21 @@ window.xattendo-window {
 
 /* Progress Bars */
 progressbar.xattendo-progress trough {
-    background-color: #080a0e;
-    border: 1px solid #1c232d;
+    background-color: #253041;
+    border: none;
     border-radius: 999px;
-    min-height: 7px;
+    min-height: 6px;
 }
 
 progressbar.xattendo-progress progress {
-    background-image: linear-gradient(to right, #38bdf8, #818cf8);
+    background-color: #4bb8f0;
     border: none;
     border-radius: 999px;
-    min-height: 7px;
+    min-height: 6px;
 }
 
 progressbar.xattendo-progress.complete progress {
-    background-image: linear-gradient(to right, #2ea043, #3fb950);
+    background-color: #34d399;
 }
 
 /* Icon & Close Buttons */
