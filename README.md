@@ -1,6 +1,6 @@
 # Xattendo Desktop Widget
 
-A 100% standalone, always-on-top desktop & GNOME Top Bar widget for **42 Logtime** and **1337 Attendo** — completely independent of any local web server, with zero `sudo` and zero GNOME Shell extensions required.
+A 100% standalone, always-on-top desktop & GNOME Top Bar widget for **42 Logtime** and **1337 Attendo** — completely independent of any local web server and with zero GNOME Shell extensions required.
 
 ## Features
 

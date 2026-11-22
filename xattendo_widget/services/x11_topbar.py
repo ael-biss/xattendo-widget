@@ -4,7 +4,7 @@ On GNOME Shell (X11/Mutter), an override-redirect (Gtk.WindowType.POPUP) window
 renders visually on top of the GNOME top bar, but Mutter's Composite Overlay
 Window claims X11 pointer input for the top panel strip (y < panel_height).
 Listening to XInput2 raw events on the X11 root window receives clicks, drags,
-and pointer motion reliably without sudo, GNOME extensions, or extra packages.
+and pointer motion reliably without GNOME extensions or extra packages.
 """
 
 import ctypes

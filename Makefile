@@ -1,6 +1,6 @@
 # ==============================================================================
 # Xattendo Desktop Widget
-# Standalone GTK3 widget — zero sudo, zero website, zero GNOME Shell extension
+# Standalone GTK3 widget — zero website, zero GNOME Shell extension
 # ==============================================================================
 
 BIN_DIR        := $(HOME)/.local/bin

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Zero-sudo, zero-source-code installer for Xattendo Desktop Widget.
+# Standalone installer for Xattendo Desktop Widget.
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/ael-biss/xattendo-widget/main/install.sh | bash
 # Or override the release download URL:
@@ -13,7 +13,7 @@ BIN_PATH="$BIN_DIR/xattendo-widget"
 AUTOSTART_DIR="$HOME/.config/autostart"
 AUTOSTART_FILE="$AUTOSTART_DIR/xattendo-desktop-widget.desktop"
 
-echo "Installing Xattendo Desktop Widget (no sudo required)..."
+echo "Installing Xattendo Desktop Widget..."
 mkdir -p "$BIN_DIR" "$AUTOSTART_DIR"
 
 TMP_FILE="${BIN_PATH}.tmp"
