@@ -18,7 +18,7 @@ from xattendo_widget.core.calculator import (
     calculate_daily_average_target,
     campus_today,
     compute_effective_today_metrics,
-    format_dec_hours,
+    format_compact_hours,
     format_hms,
     merge_period_progress,
 )
@@ -627,14 +627,14 @@ class PillWindow(Gtk.Window):
         today_iso = campus_today().isoformat()
 
         if daily.daily_target_seconds > 0:
-            daily_target_str = format_dec_hours(daily.daily_target_seconds)
+            daily_target_str = format_compact_hours(daily.daily_target_seconds)
             if daily.done and cfg.goal_reached_notify:
                 key = f'{today_iso}-daily-done'
                 if key not in self.triggered_events:
                     self.triggered_events.add(key)
                     self.system_service.notify(
                         tr(lang, 'notif_daily_done_title'),
-                        tr(lang, 'notif_daily_done_body', target=daily_target_str, logged=format_dec_hours(today_net)),
+                        tr(lang, 'notif_daily_done_body', target=daily_target_str, logged=format_compact_hours(today_net)),
                         enabled=cfg.notifications_enabled,
                     )
             elif not daily.done and cfg.almost_goal_enabled:
@@ -650,7 +650,7 @@ class PillWindow(Gtk.Window):
                         )
 
         rem_min = math.ceil(max(0.0, target_h * 3600.0 - p_net) / 60.0)
-        goal_str = f'{int(target_h)}h' if target_h == int(target_h) else f'{target_h:.1f}h'
+        goal_str = format_compact_hours(target_h * 3600.0)
         period_key = p_start or today_iso
 
         if rem_min == 0 and cfg.goal_reached_notify:
@@ -659,7 +659,7 @@ class PillWindow(Gtk.Window):
                 self.triggered_events.add(key)
                 self.system_service.notify(
                     tr(lang, 'notif_goal_title'),
-                    tr(lang, 'notif_goal_body', goal=goal_str, logged=format_dec_hours(p_net)),
+                    tr(lang, 'notif_goal_body', goal=goal_str, logged=format_compact_hours(p_net)),
                     enabled=cfg.notifications_enabled,
                 )
 
@@ -733,7 +733,7 @@ class PillWindow(Gtk.Window):
             self.sep_lbl.hide()
 
         if cfg.pill_display_mode == 'hours':
-            self.time_lbl.set_text(format_dec_hours(today_net))
+            self.time_lbl.set_text(format_compact_hours(today_net))
         elif cfg.pill_display_mode == 'period_pct':
             self.time_lbl.set_text(f'{pct:.0f}%')
         else:

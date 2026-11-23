@@ -16,7 +16,6 @@ from xattendo_widget.core.calculator import (
     calculate_daily_average_target,
     compute_effective_today_metrics,
     format_compact_hours,
-    format_dec_hours,
     format_eta_clock,
     format_hm,
     format_hms,
@@ -159,8 +158,9 @@ class PopupWindow(Gtk.Window):
         hero_top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.hero_title_lbl = Gtk.Label(xalign=0)
         self.hero_title_lbl.get_style_context().add_class('xattendo-panel-label')
-        self.hero_ratio_lbl = Gtk.Label(label='0.00h', xalign=1)
+        self.hero_ratio_lbl = Gtk.Label(label='', xalign=1)
         self.hero_ratio_lbl.set_direction(Gtk.TextDirection.LTR)
+        self.hero_ratio_lbl.set_no_show_all(True)
         self.hero_ratio_lbl.get_style_context().add_class('xattendo-panel-label')
         hero_top.pack_start(self.hero_title_lbl, True, True, 0)
         hero_top.pack_end(self.hero_ratio_lbl, False, False, 0)
@@ -214,11 +214,12 @@ class PopupWindow(Gtk.Window):
         period_panel.pack_start(self.period_progress, False, False, 0)
 
         p_foot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.period_net_lbl = Gtk.Label(label='0.00h of 30h', xalign=0)
+        self.period_net_lbl = Gtk.Label(label='0m of 30h', xalign=0)
         self.period_net_lbl.set_direction(Gtk.TextDirection.LTR)
         self.period_net_lbl.get_style_context().add_class('xattendo-mono-sm')
-        self.period_left_lbl = Gtk.Label(label='30.00h left', xalign=1)
+        self.period_left_lbl = Gtk.Label(label='30h left', xalign=1)
         self.period_left_lbl.set_direction(Gtk.TextDirection.LTR)
+        self.period_left_lbl.set_no_show_all(True)
         self.period_left_lbl.get_style_context().add_class('xattendo-hint')
         p_foot.pack_start(self.period_net_lbl, True, True, 0)
         p_foot.pack_end(self.period_left_lbl, False, False, 0)
@@ -522,14 +523,19 @@ class PopupWindow(Gtk.Window):
         )
 
         self.hero_clock.set_text(format_hms(today_net))
-        self.hero_ratio_lbl.set_text(
-            tr(
-                lang,
-                'active_of_target',
-                logged=format_dec_hours(today_net),
-                target=format_compact_hours(daily.daily_target_seconds) if daily.daily_target_seconds > 0 else '0h',
+        if daily.daily_target_seconds > 0:
+            self.hero_ratio_lbl.set_text(
+                tr(
+                    lang,
+                    'active_of_target',
+                    logged=format_compact_hours(today_net),
+                    target=format_compact_hours(daily.daily_target_seconds),
+                )
             )
-        )
+            self.hero_ratio_lbl.show()
+        else:
+            self.hero_ratio_lbl.set_text('')
+            self.hero_ratio_lbl.hide()
         self.daily_progress.set_fraction(daily.fraction)
         dp_ctx = self.daily_progress.get_style_context()
         if daily.done:
@@ -566,7 +572,7 @@ class PopupWindow(Gtk.Window):
             default_end=local.period_end,
         )
         p_hours = p_net / 3600.0
-        target_fmt = f'{int(target_h)}h' if target_h == int(target_h) else f'{target_h:.1f}h'
+        target_fmt = format_compact_hours(target_h * 3600.0)
         self.period_range_lbl.set_text(
             tr(lang, 'attendo_period_range', start=p_start[5:10] if p_start else '—', end=p_end[5:10] if p_end else '—')
         )
@@ -583,13 +589,18 @@ class PopupWindow(Gtk.Window):
             self.period_status_lbl.set_text(f'{pct:.0f}%')
 
         self.period_net_lbl.set_text(
-            tr(lang, 'active_of_target', logged=f'{p_hours:.2f}h', target=target_fmt)
+            tr(lang, 'active_of_target', logged=format_compact_hours(p_net), target=target_fmt)
         )
-        self.period_left_lbl.set_text(f"{left_h:.2f}h {tr(lang, 'period_left')}")
+        if p_hours >= target_h or left_h <= 0.0:
+            self.period_left_lbl.set_text('')
+            self.period_left_lbl.hide()
+        else:
+            self.period_left_lbl.set_text(f"{format_compact_hours(left_h * 3600.0)} {tr(lang, 'period_left')}")
+            self.period_left_lbl.show()
 
         # Bottom 2-Col: 42 Intra | 1337 Attendo
         if linked and linked.intra_linked:
-            self.intra_val_lbl.set_text(format_dec_hours(linked.intra_today_seconds))
+            self.intra_val_lbl.set_text(format_compact_hours(linked.intra_today_seconds))
             self.intra_sub_lbl.set_text(tr(lang, 'today_lower'))
             self.intra_link_btn.hide()
         else:
@@ -600,7 +611,7 @@ class PopupWindow(Gtk.Window):
 
         if linked and linked.attendo_linked and linked.current_period:
             cp = linked.current_period
-            self.attendo_val_lbl.set_text(format_dec_hours(cp.total * 3600.0))
+            self.attendo_val_lbl.set_text(format_compact_hours(cp.total * 3600.0))
             self.attendo_days_lbl.set_text(tr(lang, 'days_of_seven', counted=cp.counted_days))
             self.days_bar.set_days(cp.counted_days, 7)
             self.attendo_link_btn.hide()
@@ -614,9 +625,9 @@ class PopupWindow(Gtk.Window):
         # Sessions Tab
         week_sec = max(local.week.net_seconds, float(linked.intra_week_seconds or 0.0) if linked else 0.0)
         month_sec = max(local.month.net_seconds, float(linked.intra_month_seconds or 0.0) if linked else 0.0)
-        self.week_hours_lbl.set_text(format_dec_hours(week_sec))
+        self.week_hours_lbl.set_text(format_compact_hours(week_sec))
         self.week_clock_lbl.set_text(format_hms(week_sec))
-        self.month_hours_lbl.set_text(format_dec_hours(month_sec))
+        self.month_hours_lbl.set_text(format_compact_hours(month_sec))
         self.month_clock_lbl.set_text(format_hms(month_sec))
         self._render_sessions_tab(local, lang)
 

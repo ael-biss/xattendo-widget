@@ -90,9 +90,15 @@ class TestXattendoWidget(unittest.TestCase):
 
     def test_duration_formatting(self):
         self.assertEqual(format_hm(None), '—')
+        self.assertEqual(format_hm(0), '0m')
+        self.assertEqual(format_hm(14 * 60), '14m')
         self.assertEqual(format_hm(5 * 3600 + 12 * 60 + 45), '5h 12m')
-        self.assertEqual(format_dec_hours(3 * 3600 + 36 * 60), '3.60h')
+        self.assertEqual(format_compact_hours(0.23 * 3600), '13m')
+        self.assertEqual(format_compact_hours(0.46 * 3600), '27m')
+        self.assertEqual(format_compact_hours(3 * 3600 + 36 * 60), '3h 36m')
         self.assertEqual(format_compact_hours(7 * 3600), '7h')
+        self.assertEqual(format_dec_hours(0.23 * 3600), '13m')
+        self.assertEqual(format_dec_hours(3 * 3600 + 36 * 60), '3.60h')
         self.assertEqual(format_hms(None), '--:--:--')
         self.assertEqual(format_hms(3661), '01:01:01')
 
@@ -131,6 +137,17 @@ class TestXattendoWidget(unittest.TestCase):
                 self.assertEqual(pill.ring_widget._state, 'done' if expect_done else 'active')
                 pill.popup_win.toggle_near(pill, pill.local_snapshot, pill.linked_state)
                 self.assertTrue(pill.popup_win.get_visible())
+                if mode == 'active':
+                    self.assertTrue(pill.popup_win.hero_ratio_lbl.get_visible())
+                    self.assertNotIn('of 0', pill.popup_win.hero_ratio_lbl.get_text())
+                    self.assertTrue(pill.popup_win.period_left_lbl.get_visible())
+                elif mode == 'done':
+                    self.assertFalse(pill.popup_win.period_left_lbl.get_visible())
+                    self.assertEqual(pill.popup_win.period_left_lbl.get_text(), '')
+                    pill.linked_state.target_hours = 24.0
+                    pill.popup_win.update_content(pill.local_snapshot, pill.linked_state)
+                    self.assertFalse(pill.popup_win.hero_ratio_lbl.get_visible())
+                    self.assertEqual(pill.popup_win.hero_ratio_lbl.get_text(), '')
                 pill.popup_win._switch_page('sessions')
                 self.assertEqual(pill.popup_win.stack.get_visible_child_name(), 'sessions')
                 pill.popup_win._switch_page('overview')

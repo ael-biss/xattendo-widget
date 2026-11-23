@@ -329,8 +329,8 @@ class HistoryWindow(Gtk.Window):
             tr(
                 lang,
                 'period_summary_fmt',
-                total=f'{p_net / 3600.0:.2f}h',
-                target=f'{target_h:.0f}h',
+                total=format_compact_hours(p_net),
+                target=format_compact_hours(target_h * 3600.0),
                 counted=cp.counted_days if cp else 0,
             )
         )

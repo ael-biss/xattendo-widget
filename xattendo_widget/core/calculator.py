@@ -43,6 +43,8 @@ def format_hm(seconds: Optional[float]) -> str:
     if seconds is None:
         return '—'
     val = max(0, int(seconds))
+    if val < 3600:
+        return f'{val // 60}m'
     hours = val // 3600
     minutes = (val % 3600) // 60
     return f'{hours}h {minutes:02d}m'
@@ -61,7 +63,10 @@ def format_hms(seconds: Optional[float]) -> str:
 def format_dec_hours(seconds: Optional[float]) -> str:
     if seconds is None:
         return '—'
-    return f'{max(0.0, float(seconds)) / 3600.0:.2f}h'
+    val = max(0.0, float(seconds))
+    if val < 3600.0:
+        return f'{int(val) // 60}m'
+    return f'{val / 3600.0:.2f}h'
 
 
 def format_compact_hours(seconds: Optional[float]) -> str:
