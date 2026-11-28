@@ -34,6 +34,7 @@ from xattendo_widget.core.calculator import (
 from xattendo_widget.i18n import STRINGS, format_date, is_rtl, normalize_lang, tr
 from xattendo_widget.models import UserConfig
 from xattendo_widget.services.account_linker import (
+    format_cookie_header,
     parse_attendo_profile_html,
     parse_intra_locations_json,
 )
@@ -57,7 +58,6 @@ from xattendo_widget.services.update_service import (
     parse_semver,
     parse_update_manifest,
 )
-from xattendo_widget.ui.web_login_window import format_cookie_header
 from xattendo_widget.services.x11_topbar import (
     XI_RAW_BUTTON_PRESS,
     XI_RAW_BUTTON_RELEASE,

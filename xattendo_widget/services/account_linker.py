@@ -9,7 +9,7 @@ import os
 import re
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 import urllib.error
 from urllib.parse import quote
 import urllib.request
@@ -185,6 +185,18 @@ def parse_attendo_profile_html(html: str) -> ParsedAttendoProfile:
         today_hours=today_hours,
         target_hours=target,
     )
+
+
+def format_cookie_header(pairs: Iterable[Tuple[str, str]]) -> str:
+    """Format (name, value) pairs into a deduplicated HTTP Cookie header string."""
+    ordered: Dict[str, str] = {}
+    for raw_name, raw_val in pairs:
+        name = str(raw_name or '').strip()
+        val = str(raw_val or '').strip()
+        if not name or not val:
+            continue
+        ordered[name] = val
+    return '; '.join(f'{k}={v}' for k, v in ordered.items())
 
 
 def parse_intra_locations_json(payload: dict) -> Dict[str, float]:

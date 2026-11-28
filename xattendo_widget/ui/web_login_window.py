@@ -23,20 +23,9 @@ from xattendo_widget.constants import (
     INTRA_PROFILE_URL,
 )
 from xattendo_widget.i18n import is_rtl, normalize_lang, tr
+from xattendo_widget.services.account_linker import format_cookie_header
 from xattendo_widget.services.config_service import ConfigService
 from xattendo_widget.ui.styles import apply_rtl_layout
-
-
-def format_cookie_header(pairs: Iterable[Tuple[str, str]]) -> str:
-    """Format (name, value) pairs into a deduplicated HTTP Cookie header string."""
-    ordered: Dict[str, str] = {}
-    for raw_name, raw_val in pairs:
-        name = str(raw_name or '').strip()
-        val = str(raw_val or '').strip()
-        if not name or not val:
-            continue
-        ordered[name] = val
-    return '; '.join(f'{k}={v}' for k, v in ordered.items())
 
 
 class WebLoginWindow(Gtk.Window):
