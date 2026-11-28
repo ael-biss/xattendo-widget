@@ -176,6 +176,32 @@ class TestXattendoWidget(unittest.TestCase):
                     self.assertTrue(pill.settings_win.is_modal_open)
                     pill.settings_win._is_child_modal_open = pill.web_login_win.get_visible
                     pill.settings_win.close_window()
+
+                    # Onboarding / Quick Guide smoke test (without mutating user's config.json)
+                    self.assertFalse(pill.onboarding_win.get_visible())
+                    pill.onboarding_win.open_guide(0)
+                    self.assertTrue(pill.onboarding_win.get_visible())
+                    self.assertEqual(pill.onboarding_win.current_step, 0)
+                    pill.onboarding_win._go_next()
+                    self.assertEqual(pill.onboarding_win.current_step, 1)
+                    pill.onboarding_win._go_next()
+                    self.assertEqual(pill.onboarding_win.current_step, 2)
+                    pill.onboarding_win._go_back()
+                    self.assertEqual(pill.onboarding_win.current_step, 1)
+                    pill.onboarding_win._go_next()
+                    pill.onboarding_win._go_next()
+                    self.assertEqual(pill.onboarding_win.current_step, 3)
+
+                    orig_save = pill.config_service.save
+                    orig_done = pill.config_service.config.onboarding_completed
+                    pill.config_service.save = lambda notify=True: None
+                    try:
+                        pill.onboarding_win.complete_and_close()
+                        self.assertFalse(pill.onboarding_win.get_visible())
+                        self.assertTrue(pill.config_service.config.onboarding_completed)
+                    finally:
+                        pill.config_service.config.onboarding_completed = orig_done
+                        pill.config_service.save = orig_save
             finally:
                 if ctrl.pill is not None:
                     ctrl.pill.cleanup()
@@ -437,6 +463,7 @@ class TestXattendoWidget(unittest.TestCase):
             intra_login='ael-biss',
             attendo_token='tok_xyz',
             show_pill_eta=False,
+            onboarding_completed=True,
             language='fr',
         )
         restored = UserConfig.from_dict(cfg.to_dict())
@@ -447,8 +474,10 @@ class TestXattendoWidget(unittest.TestCase):
         self.assertEqual(restored.intra_login, 'ael-biss')
         self.assertEqual(restored.attendo_token, 'tok_xyz')
         self.assertFalse(restored.show_pill_eta)
+        self.assertTrue(restored.onboarding_completed)
         self.assertEqual(restored.language, 'fr')
         self.assertTrue(UserConfig.from_dict({}).show_pill_eta)
+        self.assertFalse(UserConfig.from_dict({}).onboarding_completed)
 
         clamped = UserConfig.from_dict({
             'refreshIntervalSeconds': 5,

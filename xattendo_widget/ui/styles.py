@@ -373,6 +373,50 @@ window.xattendo-window {
     color: #34d399;
 }
 
+/* First-Time Onboarding / Quick Guide */
+.xattendo-guide-card {
+    background-color: #10151c;
+    border: 1px solid #24303e;
+    border-radius: 14px;
+    padding: 18px;
+}
+
+.xattendo-guide-preview {
+    background-color: #161e2a;
+    border: 1px solid #243040;
+    border-radius: 11px;
+    padding: 14px;
+}
+
+.xattendo-guide-heading {
+    font-size: 17px;
+    font-weight: 800;
+    color: #f0f6fc;
+}
+
+.xattendo-guide-bullet {
+    font-size: 12.5px;
+    color: #c9d1d9;
+}
+
+.xattendo-guide-bullet-dot {
+    font-size: 12px;
+    font-weight: 800;
+    color: #38bdf8;
+}
+
+.xattendo-step-dot {
+    min-width: 8px;
+    min-height: 8px;
+    border-radius: 999px;
+    background-color: #263244;
+}
+
+.xattendo-step-dot.active {
+    min-width: 22px;
+    background-color: #38bdf8;
+}
+
 .xattendo-decimal-badge {
     background-color: #102a3c;
     color: #38bdf8;

@@ -33,6 +33,7 @@ class UserConfig:
     top_bar_x: Optional[int] = None
     position_locked: bool = False
     show_pill_eta: bool = True
+    onboarding_completed: bool = False
     language: str = 'en'
 
     def to_dict(self) -> dict:
@@ -54,6 +55,7 @@ class UserConfig:
             'topBarX': self.top_bar_x,
             'positionLocked': self.position_locked,
             'showPillEta': self.show_pill_eta,
+            'onboardingCompleted': self.onboarding_completed,
             'language': normalize_lang(self.language),
         }
 
@@ -107,6 +109,7 @@ class UserConfig:
             top_bar_x=tbx if isinstance(tbx, int) else None,
             position_locked=bool(data.get('positionLocked', False)),
             show_pill_eta=bool(data.get('showPillEta', True)),
+            onboarding_completed=bool(data.get('onboardingCompleted', False)),
             language=normalize_lang(data.get('language', 'en')),
         )
 

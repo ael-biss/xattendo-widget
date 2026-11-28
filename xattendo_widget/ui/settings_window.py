@@ -37,6 +37,7 @@ class SettingsWindow(Gtk.Window):
         on_quit_app: Optional[Callable[[], None]] = None,
         on_open_web_login: Optional[Callable[[str], None]] = None,
         is_child_modal_open: Optional[Callable[[], bool]] = None,
+        on_open_guide: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.config_service = config_service
@@ -50,6 +51,7 @@ class SettingsWindow(Gtk.Window):
         self.on_quit_app = on_quit_app
         self.on_open_web_login = on_open_web_login
         self._is_child_modal_open = is_child_modal_open
+        self.on_open_guide = on_open_guide
 
         self._lang_buttons: Dict[str, Gtk.Button] = {}
         self._preset_buttons: Dict[str, Gtk.Button] = {}
@@ -429,6 +431,11 @@ class SettingsWindow(Gtk.Window):
         app_row.pack_start(self.quit_app_btn, True, True, 0)
         outer.pack_start(app_row, False, False, 0)
 
+        self.guide_btn = Gtk.Button()
+        self.guide_btn.get_style_context().add_class('xattendo-btn')
+        self.guide_btn.connect('clicked', self._on_guide_clicked)
+        outer.pack_start(self.guide_btn, False, False, 0)
+
         upd_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         upd_box.get_style_context().add_class('xattendo-section')
         self.update_status_lbl = Gtk.Label(xalign=0)
@@ -530,6 +537,7 @@ class SettingsWindow(Gtk.Window):
         self.reset_pos_btn.set_label(tr(norm, 'reset_position'))
         self.reload_app_btn.set_label(tr(norm, 'reload_app'))
         self.quit_app_btn.set_label(tr(norm, 'quit_app'))
+        self.guide_btn.set_label(tr(norm, 'open_guide_btn'))
 
         if self._pending_update_ver:
             self.update_status_lbl.set_text(tr(norm, 'update_available_lbl', version=self._pending_update_ver))
@@ -627,6 +635,11 @@ class SettingsWindow(Gtk.Window):
         else:
             self.config_service.save(notify=True)
             self.on_sync_accounts()
+
+    def _on_guide_clicked(self, _btn: Gtk.Button) -> None:
+        self.hide()
+        if self.on_open_guide:
+            self.on_open_guide()
 
     def _on_web_login_clicked(self, _btn: Gtk.Button) -> None:
         if self.on_open_web_login is not None:

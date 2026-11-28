@@ -38,6 +38,7 @@ from xattendo_widget.services.x11_topbar import (
     is_x11_session,
 )
 from xattendo_widget.ui.history_window import HistoryWindow
+from xattendo_widget.ui.onboarding_window import OnboardingWindow
 from xattendo_widget.ui.popup_window import PopupWindow
 from xattendo_widget.ui.ring_widget import ProgressRing
 from xattendo_widget.ui.settings_window import SettingsWindow
@@ -73,6 +74,7 @@ class PillWindow(Gtk.Window):
 
         self._tick_source_id: Optional[int] = None
         self._sync_source_id: Optional[int] = None
+        self._onboarding_timer_id: Optional[int] = None
         self._x11_monitor: Optional[X11TopBarInputMonitor] = None
         self._hidden_by_env = False
         self._syncing = False
@@ -167,6 +169,10 @@ class PillWindow(Gtk.Window):
             on_credentials_captured=self._on_web_credentials_captured,
             on_open_external=self.system_service.open_url,
         )
+        self.onboarding_win = OnboardingWindow(
+            config_service=self.config_service,
+            on_open_web_login=self.web_login_win.open_login,
+        )
         self.settings_win = SettingsWindow(
             config_service=self.config_service,
             update_service=self.update_service,
@@ -179,6 +185,7 @@ class PillWindow(Gtk.Window):
             on_quit_app=self.quit_app,
             on_open_web_login=self.web_login_win.open_login,
             is_child_modal_open=self.web_login_win.get_visible,
+            on_open_guide=lambda: self.onboarding_win.open_guide(0),
         )
         self.history_win = HistoryWindow(
             config_service=self.config_service,
@@ -235,6 +242,15 @@ class PillWindow(Gtk.Window):
         if check_updates and self.update_service.is_configured and not self.simulate:
             self.update_service.check_async(self._on_startup_update_check)
 
+        if not self.simulate and not self.config_service.config.onboarding_completed:
+            self._onboarding_timer_id = GLib.timeout_add(500, self._maybe_show_onboarding)
+
+    def _maybe_show_onboarding(self) -> bool:
+        self._onboarding_timer_id = None
+        if not self.config_service.config.onboarding_completed:
+            self.onboarding_win.open_guide(0)
+        return False
+
     def cleanup(self) -> None:
         if self._tick_source_id is not None:
             GLib.source_remove(self._tick_source_id)
@@ -242,6 +258,9 @@ class PillWindow(Gtk.Window):
         if self._sync_source_id is not None:
             GLib.source_remove(self._sync_source_id)
             self._sync_source_id = None
+        if self._onboarding_timer_id is not None:
+            GLib.source_remove(self._onboarding_timer_id)
+            self._onboarding_timer_id = None
         if self._x11_monitor is not None:
             self._x11_monitor.stop()
             self._x11_monitor = None
@@ -251,6 +270,7 @@ class PillWindow(Gtk.Window):
             except Exception:
                 pass
         self.config_service.unsubscribe(self._on_config_changed)
+        self.onboarding_win.destroy()
         self.web_login_win.destroy()
         self.popup_win.destroy()
         self.history_win.destroy()
@@ -266,6 +286,9 @@ class PillWindow(Gtk.Window):
         if self._sync_source_id is not None:
             GLib.source_remove(self._sync_source_id)
             self._sync_source_id = None
+        if self._onboarding_timer_id is not None:
+            GLib.source_remove(self._onboarding_timer_id)
+            self._onboarding_timer_id = None
         if not self.simulate:
             interval = max(30, self.config_service.config.refresh_interval_seconds)
             self._sync_source_id = GLib.timeout_add_seconds(interval, self._on_sync_timer)
@@ -333,6 +356,7 @@ class PillWindow(Gtk.Window):
             self._raw_drag_button = 0
             self._dragging = False
         apply_rtl_layout(self, is_rtl(cfg.language), ltr_widgets=(self.time_lbl, self.eta_lbl))
+        self.onboarding_win.apply_language(cfg.language)
         self.web_login_win.apply_language(cfg.language)
         self.popup_win.apply_language(cfg.language)
         self.history_win.apply_language(cfg.language)
