@@ -74,6 +74,23 @@ class HeaderIcon(Gtk.DrawingArea):
             ctx.restore()
             return False
 
+        if self._icon_name == 'update':
+            # Upward arrow inside a subtle circle
+            r = 6.2 * s
+            ctx.set_line_width(max(1.3, 1.4 * s))
+            ctx.arc(cx, cy, r, 0.0, 2.0 * math.pi)
+            ctx.stroke()
+
+            ctx.move_to(cx, cy + 3.0 * s)
+            ctx.line_to(cx, cy - 3.0 * s)
+            ctx.stroke()
+
+            ctx.move_to(cx - 2.6 * s, cy - 0.6 * s)
+            ctx.line_to(cx, cy - 3.2 * s)
+            ctx.line_to(cx + 2.6 * s, cy - 0.6 * s)
+            ctx.stroke()
+            return False
+
         # 'refresh' clockwise circular arrow (Lucide rotate-cw style)
         r = 5.2 * s
         ctx.set_line_width(max(1.3, 1.5 * s))

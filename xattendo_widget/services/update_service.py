@@ -1,5 +1,6 @@
 """Self-update service supporting GitHub Releases API and custom version.json manifests."""
 
+from dataclasses import dataclass
 import json
 import os
 import sys
@@ -25,9 +26,58 @@ def is_newer_version(remote: str, local: str = __version__) -> bool:
     return parse_semver(remote) > parse_semver(local)
 
 
+@dataclass(frozen=True)
+class UpdateInfo:
+    version: str
+    download_url: str
+    notes: str = ''
+    mandatory: bool = True
+
+
+def _trim_notes(raw: str, max_len: int = 240) -> str:
+    text = (raw or '').strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + '…'
+
+
+def parse_update_manifest(data: dict) -> Optional[UpdateInfo]:
+    """Parse custom version.json or GitHub Releases API payload into UpdateInfo."""
+    if not isinstance(data, dict):
+        return None
+
+    # Format 1: Custom version.json -> {"version": "1.1.0", "download_url": "https://..."}
+    if 'version' in data and 'download_url' in data:
+        ver = str(data.get('version') or '').strip()
+        url = str(data.get('download_url') or '').strip()
+        if not ver or not url:
+            return None
+        notes = _trim_notes(str(data.get('notes') or ''))
+        mandatory = bool(data.get('mandatory', True))
+        return UpdateInfo(version=ver, download_url=url, notes=notes, mandatory=mandatory)
+
+    # Format 2: GitHub Releases API -> {"tag_name": "v1.1.0", "assets": [...]}
+    tag = str(data.get('tag_name') or '').strip()
+    assets = data.get('assets')
+    if tag and isinstance(assets, list):
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            name = str(asset.get('name', ''))
+            if name.endswith('.pyz') or name == 'xattendo-widget':
+                url = str(asset.get('browser_download_url', '') or '').strip()
+                if not url:
+                    continue
+                body = str(data.get('body') or '')
+                mandatory = '[optional]' not in body.lower()
+                return UpdateInfo(version=tag, download_url=url, notes=_trim_notes(body), mandatory=mandatory)
+    return None
+
+
 class UpdateService:
     def __init__(self, manifest_url: str = UPDATE_MANIFEST_URL) -> None:
         self.manifest_url = (manifest_url or '').strip()
+        self.latest_info: Optional[UpdateInfo] = None
 
     @property
     def is_configured(self) -> bool:
@@ -47,9 +97,10 @@ class UpdateService:
 
         def worker() -> None:
             try:
-                version, download_url = self._fetch_manifest()
-                if version and download_url and is_newer_version(version, __version__):
-                    on_result(version, download_url, None)
+                info = self._fetch_manifest_info()
+                if info and is_newer_version(info.version, __version__):
+                    self.latest_info = info
+                    on_result(info.version, info.download_url, None)
                 else:
                     on_result(None, None, None)
             except Exception as exc:
@@ -105,7 +156,7 @@ class UpdateService:
         else:
             os.execv(sys.executable, [sys.executable] + sys.argv)
 
-    def _fetch_manifest(self) -> Tuple[Optional[str], Optional[str]]:
+    def _fetch_manifest_info(self) -> Optional[UpdateInfo]:
         req = urllib.request.Request(
             self.manifest_url,
             headers={
@@ -116,19 +167,10 @@ class UpdateService:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode('utf-8'))
 
-        if not isinstance(data, dict):
-            return (None, None)
+        return parse_update_manifest(data)
 
-        # Format 1: Custom version.json -> {"version": "1.1.0", "download_url": "https://..."}
-        if 'version' in data and 'download_url' in data:
-            return (str(data['version']), str(data['download_url']))
-
-        # Format 2: GitHub Releases API -> {"tag_name": "v1.1.0", "assets": [...]}
-        tag = data.get('tag_name')
-        assets = data.get('assets')
-        if tag and isinstance(assets, list):
-            for asset in assets:
-                name = str(asset.get('name', ''))
-                if name.endswith('.pyz') or name == 'xattendo-widget':
-                    return (str(tag), str(asset.get('browser_download_url', '')))
+    def _fetch_manifest(self) -> Tuple[Optional[str], Optional[str]]:
+        info = self._fetch_manifest_info()
+        if info:
+            return (info.version, info.download_url)
         return (None, None)

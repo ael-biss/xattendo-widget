@@ -77,6 +77,23 @@ window.xattendo-window {
     border-color: #e3b341;
 }
 
+/* Update Available / Required */
+.xattendo-pill.update-required {
+    background-color: #102438;
+    border: 1px solid #38bdf8;
+}
+
+.xattendo-pill.update-required:hover,
+.xattendo-pill.update-required.xattendo-pill-hover {
+    background-color: #14304b;
+    border-color: #7dd3fc;
+}
+
+.xattendo-pill.update-required .xattendo-pill-name,
+.xattendo-pill.update-required .xattendo-pill-eta {
+    color: #38bdf8;
+}
+
 .xattendo-pill-name {
     font-weight: 700;
     font-size: 12.5px;
@@ -415,6 +432,47 @@ window.xattendo-window {
 .xattendo-step-dot.active {
     min-width: 22px;
     background-color: #38bdf8;
+}
+
+/* In-Home Forced Update & Optional Banner */
+.xattendo-update-card {
+    background-color: #141c27;
+    border: 1px solid #1e4664;
+    border-radius: 12px;
+    padding: 18px 16px;
+}
+
+.xattendo-update-version-pill {
+    font-family: "JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #38bdf8;
+    background-color: #102a3c;
+    border: 1px solid #1e4d6b;
+    border-radius: 999px;
+    padding: 3px 10px;
+}
+
+.xattendo-update-notes {
+    font-size: 11.5px;
+    color: #c9d1d9;
+    background-color: #0e131a;
+    border: 1px solid #202a37;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.xattendo-update-error {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #f85149;
+}
+
+.xattendo-update-banner {
+    background-color: #102438;
+    border: 1px solid #1e4d6b;
+    border-radius: 10px;
+    padding: 8px 10px;
 }
 
 .xattendo-decimal-badge {

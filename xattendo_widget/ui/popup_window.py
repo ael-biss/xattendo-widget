@@ -7,7 +7,7 @@ from typing import Callable, Optional
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
-from gi.repository import Gdk, Gtk
+from gi.repository import Gdk, GLib, Gtk
 
 from xattendo_widget import __version__
 from xattendo_widget.constants import ATTENDO_LOGIN_URL, ATTENDO_PROFILE_URL, INTRA_PROFILE_URL
@@ -24,6 +24,7 @@ from xattendo_widget.core.calculator import (
 from xattendo_widget.i18n import is_rtl, tr
 from xattendo_widget.models import LinkedAccountsState, LocalTrackerSnapshot
 from xattendo_widget.services.config_service import ConfigService
+from xattendo_widget.services.update_service import UpdateInfo, UpdateService
 from xattendo_widget.ui.ring_widget import CountedDaysBar, DayTimeline, HeaderIcon
 from xattendo_widget.ui.styles import apply_rtl_layout, enable_rgba
 
@@ -39,6 +40,8 @@ class PopupWindow(Gtk.Window):
         on_reload: Optional[Callable[[], None]] = None,
         on_quit: Optional[Callable[[], None]] = None,
         on_open_web_login: Optional[Callable[[str], None]] = None,
+        update_service: Optional[UpdateService] = None,
+        on_restart_after_update: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.config_service = config_service
@@ -49,8 +52,12 @@ class PopupWindow(Gtk.Window):
         self.on_reload = on_reload
         self.on_quit = on_quit
         self.on_open_web_login = on_open_web_login
+        self.update_service = update_service
+        self.on_restart_after_update = on_restart_after_update
         self._opened_at: float = 0.0
         self._active_page: str = 'overview'
+        self._pending_update: Optional[UpdateInfo] = None
+        self._updating: bool = False
 
         self.get_style_context().add_class('xattendo-transparent')
         self.set_decorated(False)
@@ -121,12 +128,13 @@ class PopupWindow(Gtk.Window):
 
         body.pack_start(header, False, False, 0)
 
-        # 2. Content Stack: 'overview' | 'sessions'
+        # 2. Content Stack: 'overview' | 'sessions' | 'update'
         self.stack = Gtk.Stack()
         self.stack.set_transition_type(Gtk.StackTransitionType.NONE)
         self.stack.set_vhomogeneous(False)
         self.stack.add_named(self._build_overview_page(), 'overview')
         self.stack.add_named(self._build_sessions_page(), 'sessions')
+        self.stack.add_named(self._build_update_page(), 'update')
         body.pack_start(self.stack, True, True, 0)
 
         # 3. Bottom Tab Navigation Bar: Overview | Sessions | Settings
@@ -156,6 +164,19 @@ class PopupWindow(Gtk.Window):
 
     def _build_overview_page(self) -> Gtk.Widget:
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+
+        # Optional Update Banner (shown only when non-mandatory update is available)
+        self.update_banner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.update_banner_box.get_style_context().add_class('xattendo-update-banner')
+        self.update_banner_box.set_no_show_all(True)
+        self.update_banner_lbl = Gtk.Label(xalign=0)
+        self.update_banner_lbl.get_style_context().add_class('xattendo-field-label')
+        self.update_banner_btn = Gtk.Button()
+        self.update_banner_btn.get_style_context().add_class('xattendo-btn-primary')
+        self.update_banner_btn.connect('clicked', lambda *_: self._start_update())
+        self.update_banner_box.pack_start(self.update_banner_lbl, True, True, 0)
+        self.update_banner_box.pack_end(self.update_banner_btn, False, False, 0)
+        page.pack_start(self.update_banner_box, False, False, 0)
 
         # Hero Panel: Today's active time + clock + bar + pace ETA + timeline + 3 inset cards
         self.hero_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -349,6 +370,57 @@ class PopupWindow(Gtk.Window):
 
         return page
 
+    def _build_update_page(self) -> Gtk.Widget:
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=11)
+        card.get_style_context().add_class('xattendo-update-card')
+
+        icon = HeaderIcon('update', size=28)
+        icon.set_halign(Gtk.Align.CENTER)
+        icon.get_style_context().add_class('xattendo-stat-cyan')
+        card.pack_start(icon, False, False, 2)
+
+        self.update_req_title_lbl = Gtk.Label()
+        self.update_req_title_lbl.set_halign(Gtk.Align.CENTER)
+        self.update_req_title_lbl.get_style_context().add_class('xattendo-title')
+        card.pack_start(self.update_req_title_lbl, False, False, 0)
+
+        self.update_req_ver_pill = Gtk.Label(label=f'v{__version__}')
+        self.update_req_ver_pill.set_direction(Gtk.TextDirection.LTR)
+        self.update_req_ver_pill.set_halign(Gtk.Align.CENTER)
+        self.update_req_ver_pill.get_style_context().add_class('xattendo-update-version-pill')
+        card.pack_start(self.update_req_ver_pill, False, False, 0)
+
+        self.update_req_desc_lbl = Gtk.Label()
+        self.update_req_desc_lbl.set_line_wrap(True)
+        self.update_req_desc_lbl.set_max_width_chars(38)
+        self.update_req_desc_lbl.set_justify(Gtk.Justification.CENTER)
+        self.update_req_desc_lbl.get_style_context().add_class('xattendo-hint')
+        card.pack_start(self.update_req_desc_lbl, False, False, 0)
+
+        self.update_notes_lbl = Gtk.Label(xalign=0)
+        self.update_notes_lbl.set_line_wrap(True)
+        self.update_notes_lbl.set_max_width_chars(38)
+        self.update_notes_lbl.set_no_show_all(True)
+        self.update_notes_lbl.get_style_context().add_class('xattendo-update-notes')
+        card.pack_start(self.update_notes_lbl, False, False, 0)
+
+        self.update_err_lbl = Gtk.Label()
+        self.update_err_lbl.set_line_wrap(True)
+        self.update_err_lbl.set_max_width_chars(38)
+        self.update_err_lbl.set_justify(Gtk.Justification.CENTER)
+        self.update_err_lbl.set_no_show_all(True)
+        self.update_err_lbl.get_style_context().add_class('xattendo-update-error')
+        card.pack_start(self.update_err_lbl, False, False, 0)
+
+        self.force_update_btn = Gtk.Button()
+        self.force_update_btn.get_style_context().add_class('xattendo-btn-primary')
+        self.force_update_btn.connect('clicked', lambda *_: self._start_update())
+        card.pack_start(self.force_update_btn, False, False, 4)
+
+        page.pack_start(card, True, True, 0)
+        return page
+
     def _build_inset_stat(self, extra_val_class: Optional[str]):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         card.get_style_context().add_class('xattendo-inset-card')
@@ -386,10 +458,110 @@ class PopupWindow(Gtk.Window):
     def _lang(self) -> str:
         return self.config_service.config.language
 
+    @property
+    def is_force_update_active(self) -> bool:
+        return bool(self._pending_update and self._pending_update.mandatory)
+
     def _switch_page(self, page_name: str) -> None:
+        if self.is_force_update_active and page_name != 'update':
+            return
         self._active_page = page_name
         self.stack.set_visible_child_name(page_name)
         self._update_nav_buttons()
+
+    def set_pending_update(self, info: Optional[UpdateInfo]) -> None:
+        self._pending_update = info
+        mandatory = bool(info and info.mandatory)
+        for btn in (self.nav_overview_btn, self.nav_sessions_btn, self.nav_settings_btn):
+            btn.set_sensitive(not mandatory)
+
+        if info is None:
+            self.update_banner_box.hide()
+            if self._active_page == 'update':
+                self._switch_page('overview')
+            return
+
+        lang = self._lang()
+        ver = info.version.lstrip('vV')
+        if mandatory:
+            self.update_banner_box.hide()
+            self.update_req_ver_pill.set_text(f'v{__version__} → v{ver}')
+            if info.notes:
+                self.update_notes_lbl.set_text(info.notes)
+                self.update_notes_lbl.show()
+            else:
+                self.update_notes_lbl.hide()
+            if not self._updating:
+                self.force_update_btn.set_label(tr(lang, 'update_now_btn', version=f'v{ver}'))
+                self.force_update_btn.set_sensitive(True)
+            self._active_page = 'update'
+            update_page = self.stack.get_child_by_name('update')
+            if update_page is not None:
+                update_page.show_all()
+            self.stack.set_visible_child_name('update')
+            self._update_nav_buttons()
+        else:
+            self.update_banner_lbl.set_text(tr(lang, 'update_banner_text', version=f'v{ver}'))
+            self.update_banner_btn.set_label(tr(lang, 'update_banner_btn'))
+            self.update_banner_box.show()
+            self.update_banner_box.show_all()
+            if self._active_page == 'update':
+                self._switch_page('overview')
+
+    def _start_update(self) -> None:
+        if self._updating or self._pending_update is None:
+            return
+        lang = self._lang()
+        info = self._pending_update
+        ver = info.version.lstrip('vV')
+
+        if info.download_url.startswith('simulate://'):
+            self.update_err_lbl.get_style_context().remove_class('xattendo-update-error')
+            self.update_err_lbl.get_style_context().add_class('xattendo-stat-green')
+            self.update_err_lbl.set_text(tr(lang, 'update_simulated_ok', version=f'v{ver}'))
+            self.update_err_lbl.show()
+            return
+
+        if self.update_service is None:
+            return
+
+        self._updating = True
+        self.force_update_btn.set_sensitive(False)
+        self.update_banner_btn.set_sensitive(False)
+        self.update_err_lbl.get_style_context().remove_class('xattendo-stat-green')
+        self.update_err_lbl.get_style_context().add_class('xattendo-update-error')
+        self.update_err_lbl.set_text(tr(lang, 'downloading_update'))
+        self.update_err_lbl.show()
+
+        self.update_service.download_and_apply_async(
+            info.download_url,
+            lambda ok, msg: GLib.idle_add(self._on_update_applied, ok, msg),
+        )
+
+    def _on_update_applied(self, ok: bool, msg: str) -> bool:
+        lang = self._lang()
+        self._updating = False
+        if ok:
+            self.update_err_lbl.get_style_context().remove_class('xattendo-update-error')
+            self.update_err_lbl.get_style_context().add_class('xattendo-stat-green')
+            self.update_err_lbl.set_text(tr(lang, 'updated_restarting'))
+            self.update_err_lbl.show()
+            GLib.timeout_add(400, self._trigger_restart)
+        else:
+            ver = self._pending_update.version.lstrip('vV') if self._pending_update else ''
+            self.force_update_btn.set_label(tr(lang, 'update_retry_btn', version=f'v{ver}'))
+            self.force_update_btn.set_sensitive(True)
+            self.update_banner_btn.set_sensitive(True)
+            self.update_err_lbl.set_text(tr(lang, 'update_failed', msg=msg))
+            self.update_err_lbl.show()
+        return False
+
+    def _trigger_restart(self) -> bool:
+        if self.on_restart_after_update:
+            self.on_restart_after_update()
+        elif self.update_service:
+            self.update_service.restart_installed()
+        return False
 
     def _update_nav_buttons(self) -> None:
         for btn, name in (
@@ -425,6 +597,7 @@ class PopupWindow(Gtk.Window):
                 self.week_clock_lbl,
                 self.month_hours_lbl,
                 self.month_clock_lbl,
+                self.update_req_ver_pill,
             ),
         )
         self.title_lbl.set_text(tr(lang, 'logtime_title'))
@@ -445,6 +618,10 @@ class PopupWindow(Gtk.Window):
         self.nav_sessions_btn.set_label(tr(lang, 'tab_sessions'))
         self.nav_settings_btn.set_label(tr(lang, 'tab_settings'))
         self.refresh_icon_btn.set_tooltip_text(tr(lang, 'refresh'))
+        self.update_req_title_lbl.set_text(tr(lang, 'update_required_title'))
+        self.update_req_desc_lbl.set_text(tr(lang, 'update_required_desc'))
+        if self._pending_update is not None:
+            self.set_pending_update(self._pending_update)
         self._update_pin_button()
 
     def _open_link(self, target: str, fallback_url: str) -> None:
@@ -494,6 +671,8 @@ class PopupWindow(Gtk.Window):
         return False
 
     def _on_settings_clicked(self, _btn: Gtk.Button) -> None:
+        if self.is_force_update_active:
+            return
         self.hide()
         self.on_open_settings()
 

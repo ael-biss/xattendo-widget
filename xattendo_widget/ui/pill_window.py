@@ -30,7 +30,7 @@ from xattendo_widget.services.account_linker import AccountLinker
 from xattendo_widget.services.config_service import ConfigService
 from xattendo_widget.services.session_tracker import SessionTracker
 from xattendo_widget.services.system_service import SystemService
-from xattendo_widget.services.update_service import UpdateService
+from xattendo_widget.services.update_service import UpdateInfo, UpdateService
 from xattendo_widget.services.x11_topbar import (
     BUTTON1_MASK,
     BUTTON2_MASK,
@@ -75,7 +75,10 @@ class PillWindow(Gtk.Window):
         self._tick_source_id: Optional[int] = None
         self._sync_source_id: Optional[int] = None
         self._onboarding_timer_id: Optional[int] = None
+        self._update_check_source_id: Optional[int] = None
         self._x11_monitor: Optional[X11TopBarInputMonitor] = None
+        self._pending_update: Optional[UpdateInfo] = None
+        self._notified_update_ver: str = ''
         self._hidden_by_env = False
         self._syncing = False
 
@@ -200,6 +203,8 @@ class PillWindow(Gtk.Window):
             on_reload=self.reload_app,
             on_quit=self.quit_app,
             on_open_web_login=self.web_login_win.open_login,
+            update_service=self.update_service,
+            on_restart_after_update=self.restart_after_update,
         )
 
         self.connect('size-allocate', self._on_size_allocate)
@@ -241,6 +246,15 @@ class PillWindow(Gtk.Window):
 
         if check_updates and self.update_service.is_configured and not self.simulate:
             self.update_service.check_async(self._on_startup_update_check)
+            self._update_check_source_id = GLib.timeout_add_seconds(1800, self._on_periodic_update_check)
+        elif self.simulate == 'update':
+            sim_info = UpdateInfo(
+                version='9.9.9',
+                download_url='simulate://update',
+                notes='• Universal browser login\n• Crisp vector icons\n• Daily goal finish ETA',
+                mandatory=True,
+            )
+            GLib.idle_add(self._apply_pending_update, sim_info)
 
         if not self.simulate and not self.config_service.config.onboarding_completed:
             self._onboarding_timer_id = GLib.timeout_add(500, self._maybe_show_onboarding)
@@ -261,6 +275,9 @@ class PillWindow(Gtk.Window):
         if self._onboarding_timer_id is not None:
             GLib.source_remove(self._onboarding_timer_id)
             self._onboarding_timer_id = None
+        if self._update_check_source_id is not None:
+            GLib.source_remove(self._update_check_source_id)
+            self._update_check_source_id = None
         if self._x11_monitor is not None:
             self._x11_monitor.stop()
             self._x11_monitor = None
@@ -289,6 +306,9 @@ class PillWindow(Gtk.Window):
         if self._onboarding_timer_id is not None:
             GLib.source_remove(self._onboarding_timer_id)
             self._onboarding_timer_id = None
+        if self._update_check_source_id is not None:
+            GLib.source_remove(self._update_check_source_id)
+            self._update_check_source_id = None
         if not self.simulate:
             interval = max(30, self.config_service.config.refresh_interval_seconds)
             self._sync_source_id = GLib.timeout_add_seconds(interval, self._on_sync_timer)
@@ -335,20 +355,60 @@ class PillWindow(Gtk.Window):
     def quit_app(self) -> None:
         Gtk.main_quit()
 
+    def _on_periodic_update_check(self) -> bool:
+        if not self.simulate and self.update_service.is_configured:
+            self.update_service.check_async(self._on_startup_update_check)
+        return True
+
+    def restart_after_update(self) -> bool:
+        if self._x11_monitor is not None:
+            self._x11_monitor.stop()
+            self._x11_monitor = None
+        self.update_service.restart_installed()
+        return False
+
     def _on_startup_update_check(
         self,
         remote_version: Optional[str],
-        _download_url: Optional[str],
+        download_url: Optional[str],
         _error: Optional[str],
     ) -> None:
-        if remote_version:
-            lang = self.config_service.config.language
-            GLib.idle_add(
-                self.system_service.notify,
-                tr(lang, 'notif_update_title'),
-                tr(lang, 'notif_update_body', version=remote_version),
-                self.config_service.config.notifications_enabled,
+        if remote_version and download_url:
+            info = self.update_service.latest_info or UpdateInfo(
+                version=remote_version,
+                download_url=download_url,
+                mandatory=True,
             )
+            GLib.idle_add(self._apply_pending_update, info)
+
+    def _apply_pending_update(self, info: UpdateInfo) -> bool:
+        self._pending_update = info
+        self.popup_win.set_pending_update(info)
+        self.settings_win.set_available_update(info.version, info.download_url)
+
+        if self._notified_update_ver != info.version:
+            self._notified_update_ver = info.version
+            lang = self.config_service.config.language
+            if info.mandatory:
+                self.system_service.notify(
+                    tr(lang, 'notif_force_update_title'),
+                    tr(lang, 'notif_force_update_body', version=info.version),
+                    self.config_service.config.notifications_enabled,
+                )
+                if not self.simulate and not self.popup_win.get_visible():
+                    self.settings_win.hide()
+                    self.history_win.hide()
+                    self.onboarding_win.hide()
+                    self.popup_win.toggle_near(self, self._current_local_for_ui(), self.linked_state)
+            else:
+                self.system_service.notify(
+                    tr(lang, 'notif_update_title'),
+                    tr(lang, 'notif_update_body', version=info.version),
+                    self.config_service.config.notifications_enabled,
+                )
+
+        self._on_tick()
+        return False
 
     def _on_config_changed(self, cfg: UserConfig) -> None:
         if cfg.position_locked:
@@ -512,6 +572,10 @@ class PillWindow(Gtk.Window):
             self._raw_drag_start_y = ly
             self._raw_win_start_x = self._pos_x
         elif button == 3:
+            if self.popup_win.is_force_update_active:
+                if not self.popup_win.get_visible():
+                    self.popup_win.toggle_near(self, self._current_local_for_ui(), self.linked_state)
+                return
             self.popup_win.hide()
             self.history_win.hide()
             self.settings_win.open_window(self.linked_state)
@@ -588,6 +652,10 @@ class PillWindow(Gtk.Window):
             self._win_start_x, self._win_start_y = self.get_position()
             return True
         if event.button == 3:
+            if self.popup_win.is_force_update_active:
+                if not self.popup_win.get_visible():
+                    self.popup_win.toggle_near(self, self._current_local_for_ui(), self.linked_state)
+                return True
             self.popup_win.hide()
             self.history_win.hide()
             self.settings_win.open_window(self.linked_state)
@@ -787,6 +855,7 @@ class PillWindow(Gtk.Window):
         ctx = self.pill.get_style_context()
         ctx.remove_class('goal-reached')
         ctx.remove_class('locked-mode')
+        ctx.remove_class('update-required')
 
         locked_now = bool(local.current_session and local.current_session.locked_now)
 
@@ -821,7 +890,13 @@ class PillWindow(Gtk.Window):
             self._daily_done_at_str = None
         self._was_daily_done = daily.done
 
-        if cfg.show_pill_eta and not daily.done and not locked_now and daily.daily_target_seconds > 0:
+        if self._pending_update is not None:
+            ctx.add_class('update-required')
+            ver_clean = self._pending_update.version.lstrip('vV')
+            self.eta_lbl.set_text(tr(lang, 'pill_update_badge', version=f'v{ver_clean}'))
+            self.eta_lbl.show()
+            self.pill.set_tooltip_text(tr(lang, 'notif_force_update_body', version=f'v{ver_clean}'))
+        elif cfg.show_pill_eta and not daily.done and not locked_now and daily.daily_target_seconds > 0:
             eta_str = format_eta_clock(local.now_ts, daily.remaining_today_seconds)
             self.eta_lbl.set_text(f'→ {eta_str}')
             self.eta_lbl.show()

@@ -651,6 +651,14 @@ class SettingsWindow(Gtk.Window):
         if self.get_visible():
             self.attendo_token_entry.set_text(self.config_service.config.attendo_token or '')
 
+    def set_available_update(self, version: str, url: str) -> None:
+        self._pending_update_ver = version
+        self._pending_update_url = url
+        lang = self._lang()
+        self.update_status_lbl.set_text(tr(lang, 'update_available_lbl', version=version))
+        self.update_btn.set_label(tr(lang, 'install_version', version=version))
+        self.update_btn.get_style_context().add_class('xattendo-btn-primary')
+
     @property
     def is_modal_open(self) -> bool:
         return bool(self._is_child_modal_open()) if self._is_child_modal_open else False

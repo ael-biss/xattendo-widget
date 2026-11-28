@@ -10,7 +10,7 @@ AUTOSTART_DIR  := $(HOME)/.config/autostart
 AUTOSTART_FILE := $(AUTOSTART_DIR)/xattendo-desktop-widget.desktop
 BUNDLE         := dist/xattendo-widget.pyz
 
-.PHONY: all build install uninstall run stop autostart disable-autostart check test sim-active sim-locked sim-done sim-unlinked help
+.PHONY: all build install uninstall run stop autostart disable-autostart check test sim-active sim-locked sim-done sim-unlinked sim-update help
 
 all: run
 
@@ -81,6 +81,11 @@ sim-unlinked:
 	@pkill -f "xattendo-widget/[r]un.py" 2>/dev/null || true
 	@nohup python3 "$(CURDIR)/run.py" --simulate unlinked >/dev/null 2>&1 </dev/null &
 	@echo "✔ Simulating active local session with unlinked Intra & Attendo..."
+
+sim-update:
+	@pkill -f "xattendo-widget/[r]un.py" 2>/dev/null || true
+	@nohup python3 "$(CURDIR)/run.py" --simulate update >/dev/null 2>&1 </dev/null &
+	@echo "✔ Simulating forced in-home update screen..."
 
 help:
 	@echo "Available commands:"

@@ -51,7 +51,12 @@ from xattendo_widget.services.session_tracker import (
     merge_session_intervals,
     normalize_and_sum_locks,
 )
-from xattendo_widget.services.update_service import is_newer_version, parse_semver
+from xattendo_widget.services.update_service import (
+    UpdateInfo,
+    is_newer_version,
+    parse_semver,
+    parse_update_manifest,
+)
 from xattendo_widget.ui.web_login_window import format_cookie_header
 from xattendo_widget.services.x11_topbar import (
     XI_RAW_BUTTON_PRESS,
@@ -205,6 +210,34 @@ class TestXattendoWidget(unittest.TestCase):
             finally:
                 if ctrl.pill is not None:
                     ctrl.pill.cleanup()
+
+        # Forced update simulation smoke test
+        ctrl_upd = AppController(simulate='update')
+        try:
+            pill = ctrl_upd.pill
+            self.assertIsNotNone(pill)
+            sim_info = UpdateInfo(version='9.9.9', download_url='simulate://update', notes='Test notes', mandatory=True)
+            pill._apply_pending_update(sim_info)
+            pill.popup_win.toggle_near(pill, pill.local_snapshot, pill.linked_state)
+            self.assertTrue(pill.popup_win.get_visible())
+            self.assertTrue(pill.popup_win.is_force_update_active)
+            self.assertEqual(pill.popup_win.stack.get_visible_child_name(), 'update')
+            self.assertFalse(pill.popup_win.nav_overview_btn.get_sensitive())
+            self.assertFalse(pill.popup_win.nav_sessions_btn.get_sensitive())
+            self.assertFalse(pill.popup_win.nav_settings_btn.get_sensitive())
+            pill.popup_win._switch_page('overview')
+            self.assertEqual(pill.popup_win.stack.get_visible_child_name(), 'update')
+            self.assertTrue(pill.pill.get_style_context().has_class('update-required'))
+
+            # Optional update keeps tabs enabled and shows Overview banner
+            opt_info = UpdateInfo(version='9.9.9', download_url='simulate://update', mandatory=False)
+            pill._apply_pending_update(opt_info)
+            self.assertFalse(pill.popup_win.is_force_update_active)
+            self.assertTrue(pill.popup_win.nav_overview_btn.get_sensitive())
+            self.assertTrue(pill.popup_win.update_banner_box.get_visible())
+        finally:
+            if ctrl_upd.pill is not None:
+                ctrl_upd.pill.cleanup()
 
     def test_session_tracker_locks_and_windows(self):
         merged = merge_session_intervals(
@@ -529,6 +562,39 @@ class TestXattendoWidget(unittest.TestCase):
     def test_update_semver_and_simulations(self):
         self.assertEqual(parse_semver('v1.2.3'), (1, 2, 3))
         self.assertTrue(is_newer_version('v1.0.1', '1.0.0'))
+
+        gh_mand = parse_update_manifest({
+            'tag_name': 'v2.0.0',
+            'body': 'Bug fixes and improvements',
+            'assets': [{'name': 'xattendo-widget.pyz', 'browser_download_url': 'https://example.com/app.pyz'}],
+        })
+        self.assertIsNotNone(gh_mand)
+        self.assertTrue(gh_mand.mandatory)
+        self.assertEqual(gh_mand.version, 'v2.0.0')
+
+        gh_opt = parse_update_manifest({
+            'tag_name': 'v2.0.1',
+            'body': '[optional] Minor polish',
+            'assets': [{'name': 'xattendo-widget.pyz', 'browser_download_url': 'https://example.com/app.pyz'}],
+        })
+        self.assertIsNotNone(gh_opt)
+        self.assertFalse(gh_opt.mandatory)
+
+        custom_opt = parse_update_manifest({
+            'version': '2.1.0',
+            'download_url': 'https://example.com/2.1.0.pyz',
+            'mandatory': False,
+        })
+        self.assertIsNotNone(custom_opt)
+        self.assertFalse(custom_opt.mandatory)
+
+        custom_mand = parse_update_manifest({
+            'version': '2.2.0',
+            'download_url': 'https://example.com/2.2.0.pyz',
+        })
+        self.assertIsNotNone(custom_mand)
+        self.assertTrue(custom_mand.mandatory)
+
         for mode in ('active', 'locked', 'done', 'unlinked'):
             local, linked = build_simulated_local_and_linked(mode)
             self.assertIsNotNone(local.current_session)

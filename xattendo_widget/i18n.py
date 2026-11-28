@@ -216,6 +216,17 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'guide_s4_b1': 'Auto-detects sessions from Brave, Firefox, Chrome, Zen, Vivaldi, Edge & Opera.',
         'guide_s4_b2': 'Using another browser? Click Sign in above once to link both accounts.',
         'guide_s4_b3': 'You can reopen this Quick Guide anytime from Settings.',
+        # Forced & In-Home Update Notifications
+        'update_required_title': 'Update Required',
+        'update_required_desc': 'A new version of Xattendo Widget is available. Update now to continue using the app.',
+        'update_now_btn': 'Update Now ({version})',
+        'update_retry_btn': 'Retry Update ({version})',
+        'update_banner_text': 'New version {version} available',
+        'update_banner_btn': 'Update',
+        'pill_update_badge': '↑ {version}',
+        'notif_force_update_title': 'Xattendo Update Required',
+        'notif_force_update_body': 'Version {version} is required. Open the widget to update now.',
+        'update_simulated_ok': 'Simulated update to {version} succeeded!',
     },
     'fr': {
         'app_name': 'Xattendo Desktop Widget',
@@ -404,6 +415,17 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'guide_s4_b1': 'Détection auto depuis Brave, Firefox, Chrome, Zen, Vivaldi, Edge & Opera.',
         'guide_s4_b2': 'Autre navigateur ? Cliquez sur Connexion ci-dessus pour lier les deux.',
         'guide_s4_b3': 'Vous pouvez rouvrir ce guide à tout moment depuis les Paramètres.',
+        # Mises à jour forcées & accueil
+        'update_required_title': 'Mise à jour requise',
+        'update_required_desc': 'Une nouvelle version de Xattendo Widget est disponible. Mettez à jour pour continuer.',
+        'update_now_btn': 'Mettre à jour ({version})',
+        'update_retry_btn': 'Réessayer ({version})',
+        'update_banner_text': 'Nouvelle version {version} disponible',
+        'update_banner_btn': 'Mettre à jour',
+        'pill_update_badge': '↑ {version}',
+        'notif_force_update_title': 'Mise à jour Xattendo requise',
+        'notif_force_update_body': 'La version {version} est requise. Ouvrez le widget pour mettre à jour.',
+        'update_simulated_ok': 'Mise à jour simulée vers {version} réussie !',
     },
     'ar': {
         'app_name': 'ودجت حضور إكس-أتندو',
@@ -592,6 +614,17 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'guide_s4_b1': 'قراءة تلقائية من Brave و Firefox و Chrome و Zen و Vivaldi و Edge و Opera.',
         'guide_s4_b2': 'تستخدم متصفحاً آخر؟ اضغط تسجيل الدخول أعلاه لربط الحسابين معاً.',
         'guide_s4_b3': 'يمكنك إعادة فتح هذا الدليل في أي وقت من الإعدادات.',
+        # تحديثات إجبارية وإشعارات الصفحة الرئيسية
+        'update_required_title': 'تحديث مطلوب',
+        'update_required_desc': 'يتوفر إصدار جديد من Xattendo Widget. حدّث الآن للمتابعة.',
+        'update_now_btn': 'تحديث الآن ({version})',
+        'update_retry_btn': 'إعادة المحاولة ({version})',
+        'update_banner_text': 'إصدار جديد {version} متوفر',
+        'update_banner_btn': 'تحديث',
+        'pill_update_badge': '↑ {version}',
+        'notif_force_update_title': 'تحديث Xattendo مطلوب',
+        'notif_force_update_body': 'الإصدار {version} مطلوب. افتح الودجت للتحديث الآن.',
+        'update_simulated_ok': 'نجح التحديث التجريبي إلى {version}!',
     },
 }
 

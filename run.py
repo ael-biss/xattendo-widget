@@ -22,9 +22,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Standalone 42 Logtime & Attendo Desktop Widget')
     parser.add_argument(
         '--simulate',
-        choices=['active', 'locked', 'done', 'unlinked'],
+        choices=['active', 'locked', 'done', 'unlinked', 'update'],
         default=None,
-        help='Run a live visual simulation for active, locked, period done (green), or unlinked state',
+        help='Run a live visual simulation for active, locked, period done (green), unlinked, or update state',
     )
     return parser.parse_args()
 
