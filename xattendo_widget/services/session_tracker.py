@@ -398,7 +398,12 @@ class SessionTracker:
         self.shared_history_db = shared_history_db
         self.legacy_archive_db = legacy_archive_db
 
-    def poll(self, closing: bool = False, now_ts: Optional[float] = None) -> LocalTrackerSnapshot:
+    def poll(
+        self,
+        closing: bool = False,
+        now_ts: Optional[float] = None,
+        period_bounds: Optional[Tuple[datetime.date, datetime.date]] = None,
+    ) -> LocalTrackerSnapshot:
         ts = now_ts if now_ts is not None else time.time()
         current = get_current_x11_session()
         current_key: Optional[str] = None
@@ -483,6 +488,7 @@ class SessionTracker:
             username=username,
             shared_db=self.shared_history_db,
             legacy_db=self.legacy_archive_db,
+            period_bounds=period_bounds,
         )
 
     @staticmethod
@@ -494,11 +500,12 @@ class SessionTracker:
         username: Optional[str] = None,
         shared_db: Path = Path(SHARED_HISTORY_DB),
         legacy_db: Path = Path(LEGACY_ARCHIVE_DB),
+        period_bounds: Optional[Tuple[datetime.date, datetime.date]] = None,
     ) -> LocalTrackerSnapshot:
         zone = campus_zone()
         now_dt = campus_now(datetime.datetime.fromtimestamp(now_ts, zone))
         day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-        p_start_d, p_end_d = attendo_period_bounds(now_dt)
+        p_start_d, p_end_d = period_bounds if period_bounds is not None else attendo_period_bounds(now_dt)
         period_start = datetime.datetime.combine(p_start_d, datetime.time(), zone).timestamp()
         week_start = (now_dt - datetime.timedelta(days=now_dt.weekday())).replace(
             hour=0, minute=0, second=0, microsecond=0

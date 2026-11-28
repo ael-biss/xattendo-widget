@@ -76,13 +76,69 @@ def format_compact_hours(seconds: Optional[float]) -> str:
     return text[:-4] if text.endswith(' 00m') else text
 
 
-def attendo_period_bounds(now_dt: Optional[datetime.datetime] = None) -> Tuple[datetime.date, datetime.date]:
-    """Return (start_date, end_date) for the 7-day Thu-Wed Attendo period containing now_dt."""
+def attendo_period_bounds(
+    now_dt: Optional[datetime.datetime] = None,
+    start_weekday: int = 0,
+) -> Tuple[datetime.date, datetime.date]:
+    """Return (start_date, end_date) for the 7-day period containing now_dt starting on start_weekday (0=Mon..6=Sun)."""
     cur = campus_now(now_dt).date()
-    days_since_thu = (cur.weekday() - 3) % 7
-    start_d = cur - datetime.timedelta(days=days_since_thu)
+    wd = int(start_weekday) % 7
+    days_since_start = (cur.weekday() - wd) % 7
+    start_d = cur - datetime.timedelta(days=days_since_start)
     end_d = start_d + datetime.timedelta(days=6)
     return (start_d, end_d)
+
+
+def _parse_iso_date_prefix(raw: str) -> Optional[datetime.date]:
+    if not raw or len(raw.strip()) < 10:
+        return None
+    try:
+        return datetime.date.fromisoformat(raw.strip()[:10])
+    except ValueError:
+        return None
+
+
+def resolve_period_bounds(
+    now_dt: Optional[datetime.datetime] = None,
+    linked: Optional[LinkedAccountsState] = None,
+    period_start_weekday: Optional[int] = None,
+    cached_period_start: str = '',
+    cached_period_end: str = '',
+) -> Tuple[datetime.date, datetime.date]:
+    """Resolve the user's active 7-day Attendo period bounds without hardcoding a global weekday."""
+    cur_dt = campus_now(now_dt)
+    today = cur_dt.date()
+
+    if linked and linked.attendo_linked:
+        if linked.current_period is not None:
+            s = _parse_iso_date_prefix(linked.current_period.start)
+            e = _parse_iso_date_prefix(linked.current_period.end)
+            if s is not None and e is not None and e >= s:
+                return (s, e)
+        if linked.previous_period is not None:
+            prev_e = _parse_iso_date_prefix(linked.previous_period.end)
+            if prev_e is not None:
+                next_start = prev_e + datetime.timedelta(days=1)
+                while next_start + datetime.timedelta(days=6) < today:
+                    next_start += datetime.timedelta(days=7)
+                return (next_start, next_start + datetime.timedelta(days=6))
+
+    if period_start_weekday is not None and not isinstance(period_start_weekday, bool) and 0 <= period_start_weekday <= 6:
+        return attendo_period_bounds(cur_dt, start_weekday=period_start_weekday)
+
+    cs = _parse_iso_date_prefix(cached_period_start)
+    ce = _parse_iso_date_prefix(cached_period_end)
+    if cs is not None and ce is not None and ce >= cs:
+        if cs <= today <= ce:
+            return (cs, ce)
+        if today > ce:
+            next_start = ce + datetime.timedelta(days=1)
+            while next_start + datetime.timedelta(days=6) < today:
+                next_start += datetime.timedelta(days=7)
+            return (next_start, next_start + datetime.timedelta(days=6))
+        return attendo_period_bounds(cur_dt, start_weekday=cs.weekday())
+
+    return attendo_period_bounds(cur_dt, start_weekday=0)
 
 
 def calculate_goal_progress(
@@ -187,13 +243,16 @@ def merge_period_progress(
             target_h = float(linked.target_hours)
         start_str = cp.start or start_str
         end_str = cp.end or end_str
-        prior_sec = sum(d.hours for d in cp.days if d.date < t_iso) * 3600.0
+        if cp.days:
+            prior_sec = sum(d.hours for d in cp.days if d.date[:10] < t_iso) * 3600.0
+        else:
+            prior_sec = max(0.0, float(cp.total)) * 3600.0
         today_attendo_sec = max(
             float(local_today_sec),
             float(linked.attendo_recorded_today_seconds or 0.0),
         )
         fused = prior_sec + today_attendo_sec
-        net_sec = max(net_sec, cp.total * 3600.0, fused)
+        net_sec = max(cp.total * 3600.0, fused)
 
     hours = net_sec / 3600.0
     pct = min(100.0, (hours / target_h) * 100.0) if target_h > 0 else 0.0
@@ -255,18 +314,24 @@ def calculate_daily_average_target(
         cp = linked.current_period
         if linked.target_hours and linked.target_hours > 0:
             target_h = float(linked.target_hours)
-        prior_days = [d for d in cp.days if d.date < t_iso]
-        prior_hours = sum(d.hours for d in prior_days) if prior_days else 0.0
-        prior_counted = sum(1 for d in prior_days if d.counted)
+        if cp.days:
+            prior_days = [d for d in cp.days if d.date[:10] < t_iso]
+            prior_hours = sum(d.hours for d in prior_days) if prior_days else 0.0
+            prior_counted = sum(1 for d in prior_days if d.counted)
+        else:
+            prior_hours = max(0.0, float(cp.total))
+            p_start = _parse_iso_date_prefix(cp.start)
+            prior_counted = min(6, max(0, (today_date - p_start).days)) if p_start is not None else 0
         remaining_days = max(0, 7 - prior_counted)
         remaining_period_hours = max(0.0, target_h - prior_hours)
     else:
         prior_period_sec = max(0.0, float(local.period.net_seconds) - float(local.today.net_seconds))
         remaining_period_hours = max(0.0, target_h - prior_period_sec / 3600.0)
+        fallback_dt = campus_now(datetime.datetime.combine(today_date, datetime.time(12, 0)))
         try:
-            p_end = datetime.date.fromisoformat(local.period_end[:10]) if local.period_end else attendo_period_bounds()[1]
+            p_end = datetime.date.fromisoformat(local.period_end[:10]) if local.period_end else attendo_period_bounds(fallback_dt)[1]
         except ValueError:
-            p_end = attendo_period_bounds()[1]
+            p_end = attendo_period_bounds(fallback_dt)[1]
         remaining_days = max(1, min(7, (p_end - today_date).days + 1))
 
     net_val = max(0.0, float(today_net_sec))
@@ -309,10 +374,16 @@ def compute_current_period_day(
 
     if linked and linked.attendo_linked and linked.current_period is not None:
         cp = linked.current_period
-        prior_counted = sum(1 for d in cp.days if d.date < t_iso and d.counted)
-        today_counted = any(d.date == t_iso and d.counted for d in cp.days)
-        current_day = max(1, min(total_days, prior_counted + 1))
-        return (current_day, total_days, today_counted)
+        if cp.days:
+            prior_counted = sum(1 for d in cp.days if d.date[:10] < t_iso and d.counted)
+            today_counted = any(d.date[:10] == t_iso and d.counted for d in cp.days)
+            current_day = max(1, min(total_days, prior_counted + 1))
+            return (current_day, total_days, today_counted)
+        p_start = _parse_iso_date_prefix(cp.start)
+        if p_start is not None:
+            current_day = max(1, min(total_days, (today_date - p_start).days + 1))
+            return (current_day, total_days, False)
+        return (1, total_days, False)
 
     try:
         p_start = (

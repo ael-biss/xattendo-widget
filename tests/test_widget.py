@@ -31,9 +31,10 @@ from xattendo_widget.core.calculator import (
     format_hm,
     format_hms,
     merge_period_progress,
+    resolve_period_bounds,
 )
 from xattendo_widget.i18n import STRINGS, format_date, format_short_date, is_rtl, normalize_lang, tr
-from xattendo_widget.models import UserConfig
+from xattendo_widget.models import AttendanceDay, AttendancePeriod, LinkedAccountsState, UserConfig
 from xattendo_widget.services.account_linker import (
     format_cookie_header,
     parse_attendo_profile_html,
@@ -182,6 +183,7 @@ class TestXattendoWidget(unittest.TestCase):
                     self.assertFalse(pill.settings_win.contains_screen_point(100, 100))
                     pill.settings_win.open_window(pill.linked_state)
                     self.assertTrue(pill.settings_win.get_visible())
+                    self.assertEqual(set(pill.settings_win._period_day_buttons.keys()), {None, 0, 1, 2, 3, 4, 5, 6})
                     self.assertFalse(pill.settings_win.is_modal_open)
                     pill.settings_win._is_child_modal_open = lambda: True
                     self.assertTrue(pill.settings_win.is_modal_open)
@@ -480,12 +482,203 @@ class TestXattendoWidget(unittest.TestCase):
         total_active = sum(b - a for a, b in segs)
         self.assertAlmostEqual(total_active, local.current_session.net_sec, places=1)
 
-    def test_attendo_period_bounds_thu_wed(self):
-        # Sunday 2026-11-22 -> Thu 2026-11-19 to Wed 2026-11-25
+    def test_attendo_period_bounds_and_resolution(self):
+        # Sunday 2026-11-22 -> default neutral Mon-Sun: 2026-11-16 to 2026-11-22
         dt = datetime.datetime(2026, 11, 22, 18, 0, 0)
         start_d, end_d = attendo_period_bounds(dt)
-        self.assertEqual(start_d.isoformat(), '2026-11-19')
-        self.assertEqual(end_d.isoformat(), '2026-11-25')
+        self.assertEqual(start_d.isoformat(), '2026-11-16')
+        self.assertEqual(end_d.isoformat(), '2026-11-22')
+
+        # Explicit Thu-Wed (weekday=3)
+        start_thu, end_wed = attendo_period_bounds(dt, start_weekday=3)
+        self.assertEqual(start_thu.isoformat(), '2026-11-19')
+        self.assertEqual(end_wed.isoformat(), '2026-11-25')
+
+        # Explicit Sat-Fri (weekday=5)
+        start_sat, end_fri = attendo_period_bounds(dt, start_weekday=5)
+        self.assertEqual(start_sat.isoformat(), '2026-11-21')
+        self.assertEqual(end_fri.isoformat(), '2026-11-27')
+
+        # Priority 1: Live Attendo current_period overrides fallback weekday and cache
+        linked_sat = LinkedAccountsState(
+            attendo_linked=True,
+            current_period=AttendancePeriod('Current period', '2026-11-21', '2026-11-27', 6.0, []),
+        )
+        r_s, r_e = resolve_period_bounds(
+            now_dt=dt,
+            linked=linked_sat,
+            period_start_weekday=3,
+            cached_period_start='2026-11-19',
+            cached_period_end='2026-11-25',
+        )
+        self.assertEqual((r_s.isoformat(), r_e.isoformat()), ('2026-11-21', '2026-11-27'))
+
+        # Priority 2: Derived from live previous_period when current_period is None
+        linked_prev = LinkedAccountsState(
+            attendo_linked=True,
+            current_period=None,
+            previous_period=AttendancePeriod('Previous period', '2026-11-14', '2026-11-20', 30.0, []),
+        )
+        r_s2, r_e2 = resolve_period_bounds(now_dt=dt, linked=linked_prev)
+        self.assertEqual((r_s2.isoformat(), r_e2.isoformat()), ('2026-11-21', '2026-11-27'))
+
+        # Priority 3: Explicit period_start_weekday when unlinked
+        r_s3, r_e3 = resolve_period_bounds(
+            now_dt=dt,
+            linked=None,
+            period_start_weekday=5,
+            cached_period_start='2026-11-19',
+            cached_period_end='2026-11-25',
+        )
+        self.assertEqual((r_s3.isoformat(), r_e3.isoformat()), ('2026-11-21', '2026-11-27'))
+
+        # Priority 4: Cached Attendo period (both inside and advancing past cached_end)
+        r_s4, r_e4 = resolve_period_bounds(
+            now_dt=dt,
+            linked=None,
+            period_start_weekday=None,
+            cached_period_start='2026-11-21',
+            cached_period_end='2026-11-27',
+        )
+        self.assertEqual((r_s4.isoformat(), r_e4.isoformat()), ('2026-11-21', '2026-11-27'))
+
+        dt_next = datetime.datetime(2026, 11, 29, 12, 0, 0)
+        r_s5, r_e5 = resolve_period_bounds(
+            now_dt=dt_next,
+            linked=None,
+            period_start_weekday=None,
+            cached_period_start='2026-11-21',
+            cached_period_end='2026-11-27',
+        )
+        self.assertEqual((r_s5.isoformat(), r_e5.isoformat()), ('2026-11-28', '2026-12-04'))
+
+        # Priority 5: Neutral Mon-Sun fallback
+        r_s6, r_e6 = resolve_period_bounds(now_dt=dt, linked=None)
+        self.assertEqual((r_s6.isoformat(), r_e6.isoformat()), ('2026-11-16', '2026-11-22'))
+
+    def test_per_user_attendo_parser_and_no_local_period_leakage(self):
+        # 1. Descending-order & duplicated periods, ISO timestamp dates, Sat-Fri student period
+        rsc_payload = json.dumps([
+            1,
+            (
+                '{"login":"other-student","todayHoursEstimation":"02:00","todayHours":null,'
+                '"periods":['
+                '{"weekStart":"2026-11-28T00:00:00.000Z","weekEnd":"2026-12-04T23:59:59.000Z","total":2.0,'
+                '"daily":[{"date":"2026-11-28T00:00:00.000Z","hours":2.0,"counted":false}]},'
+                '{"weekStart":"2026-11-21","weekEnd":"2026-11-27","total":30.0,'
+                '"daily":['
+                '{"date":"2026-11-21","hours":5.0,"counted":true},'
+                '{"date":"2026-11-22","hours":5.0,"counted":true},'
+                '{"date":"2026-11-23","hours":4.0,"counted":true},'
+                '{"date":"2026-11-24","hours":4.0,"counted":true},'
+                '{"date":"2026-11-25","hours":4.0,"counted":true},'
+                '{"date":"2026-11-26","hours":4.0,"counted":true},'
+                '{"date":"2026-11-27","hours":4.0,"counted":true}'
+                ']},'
+                '{"weekStart":"2026-11-28","weekEnd":"2026-12-04","total":2.0,'
+                '"daily":[{"date":"2026-11-28","hours":2.0,"counted":false}]}'
+                ']}'
+            ),
+        ])
+        html = f'<html><body><script>self.__next_f.push({rsc_payload})</script></body></html>'
+        parsed = parse_attendo_profile_html(html, today_iso='2026-11-28')
+        self.assertEqual(parsed.login, 'other-student')
+        self.assertIsNotNone(parsed.current)
+        self.assertEqual(parsed.current.start, '2026-11-28')
+        self.assertEqual(parsed.current.end, '2026-12-04')
+        self.assertIsNotNone(parsed.previous)
+        self.assertEqual(parsed.previous.start, '2026-11-21')
+
+        # 2. Completed 7/7 period ending yesterday -> synthesizes new Day 1 period
+        rsc_completed = json.dumps([
+            1,
+            (
+                '{"login":"other-student","todayHoursEstimation":null,"todayHours":null,'
+                '"periods":['
+                '{"weekStart":"2026-11-21","weekEnd":"2026-11-27","total":30.0,'
+                '"daily":['
+                '{"date":"2026-11-21","hours":5.0,"counted":true},'
+                '{"date":"2026-11-22","hours":5.0,"counted":true},'
+                '{"date":"2026-11-23","hours":4.0,"counted":true},'
+                '{"date":"2026-11-24","hours":4.0,"counted":true},'
+                '{"date":"2026-11-25","hours":4.0,"counted":true},'
+                '{"date":"2026-11-26","hours":4.0,"counted":true},'
+                '{"date":"2026-11-27","hours":4.0,"counted":true}'
+                ']}'
+                ']}'
+            ),
+        ])
+        html_completed = f'<html><body><script>self.__next_f.push({rsc_completed})</script></body></html>'
+        parsed_day1 = parse_attendo_profile_html(html_completed, today_iso='2026-11-28')
+        self.assertIsNotNone(parsed_day1.current)
+        self.assertEqual((parsed_day1.current.start, parsed_day1.current.end), ('2026-11-28', '2026-12-04'))
+        self.assertEqual(parsed_day1.current.total, 0.0)
+        self.assertEqual(parsed_day1.current.days, [])
+        self.assertIsNotNone(parsed_day1.previous)
+        self.assertEqual(parsed_day1.previous.start, '2026-11-21')
+
+        # 3. Completed 7/7 period where today IS Day 7 -> retains as current
+        parsed_day7 = parse_attendo_profile_html(html_completed, today_iso='2026-11-27')
+        self.assertIsNotNone(parsed_day7.current)
+        self.assertEqual(parsed_day7.current.start, '2026-11-21')
+        self.assertEqual(parsed_day7.current.counted_days, 7)
+
+        # 4. merge_period_progress must NOT leak local_period_sec when Attendo is linked
+        linked_day1 = LinkedAccountsState(
+            attendo_linked=True,
+            target_hours=30.0,
+            current_period=parsed_day1.current,
+            previous_period=parsed_day1.previous,
+        )
+        p_net, target_h, s_str, e_str, pct, left_h = merge_period_progress(
+            local_period_sec=14.0 * 3600.0,
+            local_today_sec=2.0 * 3600.0,
+            linked=linked_day1,
+            today_iso='2026-11-28',
+        )
+        self.assertEqual((s_str, e_str), ('2026-11-28', '2026-12-04'))
+        self.assertAlmostEqual(p_net / 3600.0, 2.0, places=2)
+        self.assertAlmostEqual(left_h, 28.0, places=2)
+        self.assertAlmostEqual(pct, (2.0 / 30.0) * 100.0, places=1)
+
+        # 5. Daily average target & current period day for synthesized Day 1, freeze day, and custom period_bounds
+        local, _ = build_simulated_local_and_linked('unlinked')
+        d_day1 = calculate_daily_average_target(local, linked_day1, 2.0 * 3600.0, today_iso='2026-11-28')
+        self.assertEqual(d_day1.remaining_days, 7)
+        self.assertAlmostEqual(d_day1.daily_target_seconds, (30.0 / 7.0) * 3600.0, places=1)
+        self.assertEqual(compute_current_period_day(local, linked_day1, today_iso='2026-11-28'), (1, 7, False))
+
+        # Uncounted freeze day mid-period: 2 counted days before today -> Day 3 of 7, 5 remaining days
+        linked_freeze = LinkedAccountsState(
+            attendo_linked=True,
+            target_hours=30.0,
+            current_period=AttendancePeriod(
+                'Current period',
+                '2026-11-21',
+                '2026-11-27',
+                10.0,
+                [
+                    AttendanceDay('2026-11-21', 5.0, True),
+                    AttendanceDay('2026-11-22', 0.0, False),
+                    AttendanceDay('2026-11-23', 5.0, True),
+                ],
+            ),
+        )
+        d_freeze = calculate_daily_average_target(local, linked_freeze, 1.0 * 3600.0, today_iso='2026-11-24')
+        self.assertEqual(d_freeze.remaining_days, 5)
+        self.assertAlmostEqual(d_freeze.remaining_period_hours, 20.0, places=2)
+        self.assertEqual(compute_current_period_day(local, linked_freeze, today_iso='2026-11-24'), (3, 7, False))
+
+        # SessionTracker._build_snapshot honors custom period_bounds
+        now_dt = datetime.datetime(2026, 11, 28, 14, 0, 0, tzinfo=datetime.timezone.utc)
+        snap_custom = SessionTracker._build_snapshot(
+            sessions={},
+            baselines={},
+            current_key=None,
+            now_ts=now_dt.timestamp(),
+            period_bounds=(datetime.date(2026, 11, 28), datetime.date(2026, 12, 4)),
+        )
+        self.assertEqual((snap_custom.period_start, snap_custom.period_end), ('2026-11-28', '2026-12-04'))
 
     def test_goal_rounding_and_clip(self):
         p = calculate_goal_progress(6 * 3600 + 35 * 60, 7 * 3600)
@@ -504,6 +697,9 @@ class TestXattendoWidget(unittest.TestCase):
             show_pill_eta=False,
             onboarding_completed=True,
             language='fr',
+            period_start_weekday=5,
+            cached_period_start='2026-11-21',
+            cached_period_end='2026-11-27',
         )
         restored = UserConfig.from_dict(cfg.to_dict())
         self.assertEqual(restored.refresh_interval_seconds, 90)
@@ -515,8 +711,12 @@ class TestXattendoWidget(unittest.TestCase):
         self.assertFalse(restored.show_pill_eta)
         self.assertTrue(restored.onboarding_completed)
         self.assertEqual(restored.language, 'fr')
+        self.assertEqual(restored.period_start_weekday, 5)
+        self.assertEqual(restored.cached_period_start, '2026-11-21')
+        self.assertEqual(restored.cached_period_end, '2026-11-27')
         self.assertTrue(UserConfig.from_dict({}).show_pill_eta)
         self.assertFalse(UserConfig.from_dict({}).onboarding_completed)
+        self.assertIsNone(UserConfig.from_dict({}).period_start_weekday)
 
         clamped = UserConfig.from_dict({
             'refreshIntervalSeconds': 5,
@@ -524,12 +724,19 @@ class TestXattendoWidget(unittest.TestCase):
             'pillDisplayMode': 'invalid',
             'browserPreference': 'safari',
             'language': 'xx',
+            'periodStartWeekday': True,
+            'cachedPeriodStart': 'not-a-date',
+            'cachedPeriodEnd': '2026-11-27T12:00:00Z',
         })
         self.assertEqual(clamped.refresh_interval_seconds, 30)
         self.assertEqual(clamped.period_target_hours, 200.0)
         self.assertEqual(clamped.pill_display_mode, 'hms')
         self.assertEqual(clamped.browser_preference, 'auto')
         self.assertEqual(clamped.language, 'en')
+        self.assertIsNone(clamped.period_start_weekday)
+        self.assertEqual(clamped.cached_period_start, '')
+        self.assertEqual(clamped.cached_period_end, '2026-11-27')
+        self.assertIsNone(UserConfig.from_dict({'periodStartWeekday': 9}).period_start_weekday)
 
     def test_i18n_parity_and_rtl(self):
         en_keys = set(STRINGS['en'].keys())

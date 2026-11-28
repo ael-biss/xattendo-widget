@@ -883,6 +883,11 @@ class PopupWindow(Gtk.Window):
                 today_done=bool(daily.done or today_counted),
             )
             self.attendo_link_btn.hide()
+        elif linked and linked.attendo_linked:
+            self.attendo_val_lbl.set_text(format_compact_hours(0.0))
+            self.attendo_days_lbl.set_text(tr(lang, 'days_of_seven', counted=0))
+            self.days_bar.set_days(0, 7, current_day=day_num, today_done=daily.done)
+            self.attendo_link_btn.hide()
         else:
             self.attendo_val_lbl.set_text('—')
             self.attendo_days_lbl.set_text(tr(lang, 'not_linked_badge'))

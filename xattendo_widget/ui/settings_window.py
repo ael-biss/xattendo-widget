@@ -57,8 +57,10 @@ class SettingsWindow(Gtk.Window):
         self._preset_buttons: Dict[str, Gtk.Button] = {}
         self._mode_buttons: Dict[str, Gtk.Button] = {}
         self._browser_buttons: Dict[str, Gtk.Button] = {}
+        self._period_day_buttons: Dict[Optional[int], Gtk.Button] = {}
         self._draft_mode: str = 'hms'
         self._draft_browser: str = 'auto'
+        self._draft_period_start_weekday: Optional[int] = None
         self._linked_state: Optional[LinkedAccountsState] = None
         self._pending_update_url: str = ''
         self._pending_update_ver: str = ''
@@ -329,6 +331,28 @@ class SettingsWindow(Gtk.Window):
         target_row.pack_end(self.period_target_spin, False, False, 4)
         box.pack_start(target_row, False, False, 0)
 
+        self.period_start_day_lbl = Gtk.Label(xalign=0)
+        self.period_start_day_lbl.get_style_context().add_class('xattendo-hint')
+        box.pack_start(self.period_start_day_lbl, False, False, 0)
+
+        self.period_day_row1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.period_day_row1.set_homogeneous(True)
+        for wd in (None, 0, 1, 2):
+            btn = Gtk.Button()
+            btn.connect('clicked', lambda _b, w=wd: self._select_period_start_day(w))
+            self.period_day_row1.pack_start(btn, True, True, 0)
+            self._period_day_buttons[wd] = btn
+        box.pack_start(self.period_day_row1, False, False, 0)
+
+        self.period_day_row2 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.period_day_row2.set_homogeneous(True)
+        for wd in (3, 4, 5, 6):
+            btn = Gtk.Button()
+            btn.connect('clicked', lambda _b, w=wd: self._select_period_start_day(w))
+            self.period_day_row2.pack_start(btn, True, True, 0)
+            self._period_day_buttons[wd] = btn
+        box.pack_start(self.period_day_row2, False, False, 0)
+
         int_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.refresh_int_lbl = Gtk.Label(xalign=0)
         self.refresh_int_lbl.get_style_context().add_class('xattendo-field-label')
@@ -351,6 +375,14 @@ class SettingsWindow(Gtk.Window):
             ctx.remove_class('xattendo-btn')
             ctx.remove_class('xattendo-btn-primary')
             ctx.add_class('xattendo-btn-primary' if b == browser else 'xattendo-btn')
+
+    def _select_period_start_day(self, weekday: Optional[int]) -> None:
+        self._draft_period_start_weekday = weekday
+        for wd, btn in self._period_day_buttons.items():
+            ctx = btn.get_style_context()
+            ctx.remove_class('xattendo-btn')
+            ctx.remove_class('xattendo-btn-primary')
+            ctx.add_class('xattendo-btn-primary' if wd == weekday else 'xattendo-btn')
 
     def _build_notifications_section(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -477,6 +509,8 @@ class SettingsWindow(Gtk.Window):
             self.preset_row,
             self.pill_mode_row,
             self.browser_row,
+            self.period_day_row1,
+            self.period_day_row2,
             self.intra_login_entry,
             self.attendo_token_entry,
             self.period_target_spin,
@@ -522,6 +556,10 @@ class SettingsWindow(Gtk.Window):
         self.attendo_token_entry.set_placeholder_text(tr(norm, 'attendo_token_placeholder'))
         self.period_target_lbl.set_text(tr(norm, 'period_target_label'))
         self.hours_unit_lbl.set_text(tr(norm, 'hours_short'))
+        self.period_start_day_lbl.set_text(tr(norm, 'period_start_day_label'))
+        self._period_day_buttons[None].set_label(tr(norm, 'period_start_auto'))
+        for wd in range(7):
+            self._period_day_buttons[wd].set_label(tr(norm, f'wd_short_{wd}'))
         self.refresh_int_lbl.set_text(tr(norm, 'refresh_interval_label'))
         self.sec_unit_lbl.set_text(tr(norm, 'sec_short'))
         self.update_linked_status(self._linked_state)
@@ -599,6 +637,7 @@ class SettingsWindow(Gtk.Window):
         self.preset_row.set_sensitive(cfg.top_bar_mode)
         self._select_pill_mode(cfg.pill_display_mode)
         self._select_browser(cfg.browser_preference)
+        self._select_period_start_day(cfg.period_start_weekday)
         self.intra_login_entry.set_text(cfg.intra_login or '')
         self.attendo_token_entry.set_text(cfg.attendo_token or '')
         self.period_target_spin.set_value(cfg.period_target_hours)
@@ -613,6 +652,8 @@ class SettingsWindow(Gtk.Window):
     def _on_save_clicked(self, _btn: Gtk.Button) -> None:
         cfg = self.config_service.config
         prev_top_bar_mode = cfg.top_bar_mode
+        prev_login = cfg.intra_login
+        prev_token = cfg.attendo_token
 
         cfg.top_bar_mode = self.top_bar_switch.get_active()
         cfg.position_locked = self.pin_switch.get_active()
@@ -622,6 +663,10 @@ class SettingsWindow(Gtk.Window):
         cfg.intra_login = self.intra_login_entry.get_text().strip()
         cfg.attendo_token = self.attendo_token_entry.get_text().strip()
         cfg.period_target_hours = float(self.period_target_spin.get_value())
+        cfg.period_start_weekday = self._draft_period_start_weekday
+        if cfg.intra_login != prev_login or cfg.attendo_token != prev_token:
+            cfg.cached_period_start = ''
+            cfg.cached_period_end = ''
         cfg.refresh_interval_seconds = int(self.refresh_spin.get_value())
         cfg.notifications_enabled = self.notif_switch.get_active()
         cfg.goal_reached_notify = self.goal_notify_switch.get_active()

@@ -1,6 +1,7 @@
 """Data models for configuration, local session tracking, and linked 42 Intra / Attendo accounts."""
 
 from dataclasses import dataclass, field
+import datetime
 from typing import Dict, List, Optional
 
 from xattendo_widget.constants import (
@@ -35,6 +36,9 @@ class UserConfig:
     show_pill_eta: bool = True
     onboarding_completed: bool = False
     language: str = 'en'
+    period_start_weekday: Optional[int] = None
+    cached_period_start: str = ''
+    cached_period_end: str = ''
 
     def to_dict(self) -> dict:
         return {
@@ -57,6 +61,9 @@ class UserConfig:
             'showPillEta': self.show_pill_eta,
             'onboardingCompleted': self.onboarding_completed,
             'language': normalize_lang(self.language),
+            'periodStartWeekday': self.period_start_weekday,
+            'cachedPeriodStart': self.cached_period_start,
+            'cachedPeriodEnd': self.cached_period_end,
         }
 
     @classmethod
@@ -91,6 +98,24 @@ class UserConfig:
         wy = data.get('widgetY')
         tbx = data.get('topBarX')
 
+        raw_wd = data.get('periodStartWeekday')
+        period_wd: Optional[int] = (
+            raw_wd
+            if isinstance(raw_wd, int) and not isinstance(raw_wd, bool) and 0 <= raw_wd <= 6
+            else None
+        )
+
+        def _clean_iso_date(raw: object) -> str:
+            if not isinstance(raw, str):
+                return ''
+            text = raw.strip()
+            if len(text) < 10:
+                return ''
+            try:
+                return datetime.date.fromisoformat(text[:10]).isoformat()
+            except ValueError:
+                return ''
+
         return cls(
             refresh_interval_seconds=refresh_sec,
             pill_display_mode=mode,
@@ -111,6 +136,9 @@ class UserConfig:
             show_pill_eta=bool(data.get('showPillEta', True)),
             onboarding_completed=bool(data.get('onboardingCompleted', False)),
             language=normalize_lang(data.get('language', 'en')),
+            period_start_weekday=period_wd,
+            cached_period_start=_clean_iso_date(data.get('cachedPeriodStart')),
+            cached_period_end=_clean_iso_date(data.get('cachedPeriodEnd')),
         )
 
 

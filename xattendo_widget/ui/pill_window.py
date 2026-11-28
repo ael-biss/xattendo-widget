@@ -23,6 +23,7 @@ from xattendo_widget.core.calculator import (
     format_eta_clock,
     format_hms,
     merge_period_progress,
+    resolve_period_bounds,
 )
 from xattendo_widget.i18n import is_rtl, tr
 from xattendo_widget.models import DailyTargetProgress, LinkedAccountsState, LocalTrackerSnapshot, UserConfig
@@ -235,7 +236,10 @@ class PillWindow(Gtk.Window):
         if self.simulate:
             self.local_snapshot, self.linked_state = build_simulated_local_and_linked(self.simulate)
         else:
-            self.local_snapshot = self.session_tracker.poll(closing=False)
+            self.local_snapshot = self.session_tracker.poll(
+                closing=False,
+                period_bounds=self._resolved_period_bounds(),
+            )
             self._last_poll_mono = time.monotonic()
             if self.linked_state is None:
                 self.sync_accounts()
@@ -283,7 +287,10 @@ class PillWindow(Gtk.Window):
             self._x11_monitor = None
         if not self.simulate:
             try:
-                self.session_tracker.poll(closing=False)
+                self.session_tracker.poll(
+                    closing=False,
+                    period_bounds=self._resolved_period_bounds(),
+                )
             except Exception:
                 pass
         self.config_service.unsubscribe(self._on_config_changed)
@@ -317,6 +324,15 @@ class PillWindow(Gtk.Window):
         self.sync_accounts()
         return True
 
+    def _resolved_period_bounds(self) -> Tuple[datetime.date, datetime.date]:
+        cfg = self.config_service.config
+        return resolve_period_bounds(
+            linked=self.linked_state,
+            period_start_weekday=cfg.period_start_weekday,
+            cached_period_start=cfg.cached_period_start,
+            cached_period_end=cfg.cached_period_end,
+        )
+
     def sync_accounts(self) -> None:
         if self.simulate or self._syncing:
             return
@@ -332,11 +348,38 @@ class PillWindow(Gtk.Window):
             attendo_token=cfg.attendo_token,
             intra_cookie=cfg.intra_cookie,
             on_result=on_done,
+            period_start_weekday=cfg.period_start_weekday,
+            cached_period_start=cfg.cached_period_start,
+            cached_period_end=cfg.cached_period_end,
         )
 
     def _on_accounts_synced(self, state: LinkedAccountsState) -> bool:
         self._syncing = False
         self.linked_state = state
+        if state.attendo_linked and state.current_period is not None:
+            cp = state.current_period
+            s_str = (cp.start or '')[:10]
+            e_str = (cp.end or '')[:10]
+            if len(s_str) == 10 and len(e_str) == 10:
+                try:
+                    datetime.date.fromisoformat(s_str)
+                    datetime.date.fromisoformat(e_str)
+                    cfg = self.config_service.config
+                    if cfg.cached_period_start != s_str or cfg.cached_period_end != e_str:
+                        cfg.cached_period_start = s_str
+                        cfg.cached_period_end = e_str
+                        self.config_service.save(notify=False)
+                except ValueError:
+                    pass
+        if not self.simulate:
+            try:
+                self.local_snapshot = self.session_tracker.poll(
+                    closing=False,
+                    period_bounds=self._resolved_period_bounds(),
+                )
+                self._last_poll_mono = time.monotonic()
+            except Exception:
+                pass
         self.settings_win.update_linked_status(state)
         self._on_tick()
         return False
@@ -420,6 +463,15 @@ class PillWindow(Gtk.Window):
         self.web_login_win.apply_language(cfg.language)
         self.popup_win.apply_language(cfg.language)
         self.history_win.apply_language(cfg.language)
+        if not self.simulate:
+            try:
+                self.local_snapshot = self.session_tracker.poll(
+                    closing=False,
+                    period_bounds=self._resolved_period_bounds(),
+                )
+                self._last_poll_mono = time.monotonic()
+            except Exception:
+                pass
         self._schedule_account_sync()
         self._on_tick()
 
@@ -818,7 +870,10 @@ class PillWindow(Gtk.Window):
         if not self.simulate and (now_mono - self._last_poll_mono) >= 2.0:
             self._last_poll_mono = now_mono
             try:
-                self.local_snapshot = self.session_tracker.poll(closing=False)
+                self.local_snapshot = self.session_tracker.poll(
+                    closing=False,
+                    period_bounds=self._resolved_period_bounds(),
+                )
             except Exception:
                 pass
 

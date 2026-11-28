@@ -15,7 +15,7 @@ from urllib.parse import quote
 import urllib.request
 
 from xattendo_widget.constants import ATTENDO_PROFILE_URL
-from xattendo_widget.core.calculator import attendo_period_bounds, campus_now
+from xattendo_widget.core.calculator import campus_now, campus_today, resolve_period_bounds
 from xattendo_widget.models import AttendanceDay, AttendancePeriod, LinkedAccountsState
 from xattendo_widget.services.browser_cookies import read_attendo_tokens, read_intra_cookie_jars
 
@@ -100,7 +100,20 @@ def _extract_next_data(html: str) -> str:
     return ''.join(chunks)
 
 
-def parse_attendo_profile_html(html: str) -> ParsedAttendoProfile:
+def _normalize_iso_date(raw: object) -> Optional[str]:
+    """Validate and normalize an ISO date or timestamp string to YYYY-MM-DD."""
+    if not isinstance(raw, str):
+        return None
+    text = raw.strip()
+    if len(text) < 10:
+        return None
+    try:
+        return datetime.date.fromisoformat(text[:10]).isoformat()
+    except ValueError:
+        return None
+
+
+def parse_attendo_profile_html(html: str, today_iso: Optional[str] = None) -> ParsedAttendoProfile:
     """Parse Next.js RSC payload and visible target from Attendo's student profile HTML."""
     data = _extract_next_data(html)
     if not data:
@@ -118,7 +131,7 @@ def parse_attendo_profile_html(html: str) -> ParsedAttendoProfile:
     login = logins[-1]
 
     decoder = json.JSONDecoder()
-    raw_periods: List[Tuple[str, str, float, List[AttendanceDay]]] = []
+    deduped_periods: Dict[Tuple[str, str], Tuple[str, str, float, List[AttendanceDay]]] = {}
     for match in re.finditer(r'\{\s*"weekStart"\s*:', data):
         try:
             period_obj, _ = decoder.raw_decode(data, match.start())
@@ -126,13 +139,13 @@ def parse_attendo_profile_html(html: str) -> ParsedAttendoProfile:
             continue
         if not isinstance(period_obj, dict):
             continue
-        start = period_obj.get('weekStart')
-        end = period_obj.get('weekEnd')
+        start = _normalize_iso_date(period_obj.get('weekStart'))
+        end = _normalize_iso_date(period_obj.get('weekEnd'))
         total = period_obj.get('total')
         daily = period_obj.get('daily')
         if not (
-            isinstance(start, str)
-            and isinstance(end, str)
+            start is not None
+            and end is not None
             and type(total) in (int, float)
             and isinstance(daily, list)
         ):
@@ -141,30 +154,58 @@ def parse_attendo_profile_html(html: str) -> ParsedAttendoProfile:
         for day_obj in daily:
             if not isinstance(day_obj, dict):
                 continue
-            d_str = day_obj.get('date')
+            d_str = _normalize_iso_date(day_obj.get('date'))
             counted = day_obj.get('counted')
             hours = day_obj.get('hours', day_obj.get('hoursLogged'))
-            if isinstance(d_str, str) and isinstance(counted, bool) and type(hours) in (int, float):
+            if d_str is not None and isinstance(counted, bool) and type(hours) in (int, float):
                 days.append(AttendanceDay(date=d_str, hours=float(hours), counted=counted))
-        raw_periods.append((start, end, float(total), days))
+        key = (start, end)
+        existing = deduped_periods.get(key)
+        if existing is None or len(days) >= len(existing[3]):
+            deduped_periods[key] = (start, end, float(total), days)
 
-    if not raw_periods:
+    if not deduped_periods:
         raise ValueError('Could not find attendance periods in Attendo profile HTML.')
 
-    last_counted = sum(1 for d in raw_periods[-1][3] if d.counted)
-    if last_counted < 7:
-        cur_raw = raw_periods[-1]
+    raw_periods = [deduped_periods[k] for k in sorted(deduped_periods.keys())]
+    t_iso = _normalize_iso_date(today_iso) if today_iso else campus_today().isoformat()
+    if t_iso is None:
+        t_iso = campus_today().isoformat()
+    today_date = datetime.date.fromisoformat(t_iso)
+
+    last_start, last_end, last_total, last_days = raw_periods[-1]
+    last_counted = sum(1 for d in last_days if d.counted)
+    in_last_period = (
+        last_counted < 7
+        or any(d.date == t_iso for d in last_days)
+        or (last_start <= t_iso <= last_end)
+    )
+    if in_last_period:
         prev_raw = raw_periods[-2] if len(raw_periods) > 1 else None
-        current = AttendancePeriod('Current period', cur_raw[0], cur_raw[1], cur_raw[2], cur_raw[3])
-        previous = (
+        current: Optional[AttendancePeriod] = AttendancePeriod(
+            'Current period', last_start, last_end, last_total, last_days
+        )
+        previous: Optional[AttendancePeriod] = (
             AttendancePeriod('Previous period', prev_raw[0], prev_raw[1], prev_raw[2], prev_raw[3])
             if prev_raw
             else None
         )
     else:
-        prev_raw = raw_periods[-1]
-        current = None
-        previous = AttendancePeriod('Previous period', prev_raw[0], prev_raw[1], prev_raw[2], prev_raw[3])
+        previous = AttendancePeriod('Previous period', last_start, last_end, last_total, last_days)
+        if t_iso > last_end:
+            next_start = datetime.date.fromisoformat(last_end) + datetime.timedelta(days=1)
+            while next_start + datetime.timedelta(days=6) < today_date:
+                next_start += datetime.timedelta(days=7)
+            next_end = next_start + datetime.timedelta(days=6)
+            current = AttendancePeriod(
+                'Current period',
+                next_start.isoformat(),
+                next_end.isoformat(),
+                0.0,
+                [],
+            )
+        else:
+            current = None
 
     visible = _VisibleText()
     visible.feed(html)
@@ -234,7 +275,11 @@ def _collect_attendo_cookie_headers(manual_token: str, browser_pref: str) -> Lis
     return headers
 
 
-def _fetch_attendo(manual_token: str, browser_pref: str) -> Tuple[Optional[ParsedAttendoProfile], Optional[str]]:
+def _fetch_attendo(
+    manual_token: str,
+    browser_pref: str,
+    today_iso: Optional[str] = None,
+) -> Tuple[Optional[ParsedAttendoProfile], Optional[str]]:
     headers = _collect_attendo_cookie_headers(manual_token, browser_pref)
     if not headers:
         return (None, 'Sign in to 1337 Attendo in your browser.')
@@ -252,7 +297,7 @@ def _fetch_attendo(manual_token: str, browser_pref: str) -> Tuple[Optional[Parse
             opener = urllib.request.build_opener(_NoRedirect())
             with opener.open(req, timeout=12) as resp:
                 body = resp.read(8 * 1024 * 1024 + 1)
-            return (parse_attendo_profile_html(body.decode('utf-8', errors='replace')), None)
+            return (parse_attendo_profile_html(body.decode('utf-8', errors='replace'), today_iso=today_iso), None)
         except PermissionError:
             last_err = 'Attendo session expired.'
             continue
@@ -323,13 +368,16 @@ class AccountLinker:
         intra_login: str = '',
         attendo_token: str = '',
         intra_cookie: str = '',
+        period_start_weekday: Optional[int] = None,
+        cached_period_start: str = '',
+        cached_period_end: str = '',
     ) -> LinkedAccountsState:
         now_dt = campus_now()
         today = now_dt.date()
         today_iso = today.isoformat()
         yest_iso = (today - datetime.timedelta(days=1)).isoformat()
 
-        profile, attendo_err = _fetch_attendo(attendo_token, browser_pref)
+        profile, attendo_err = _fetch_attendo(attendo_token, browser_pref, today_iso=today_iso)
         login = (
             intra_login.strip()
             or (profile.login if profile else '')
@@ -358,19 +406,25 @@ class AccountLinker:
             intra_today = daily_map.get(today_iso, 0.0)
             intra_yest = daily_map.get(yest_iso, 0.0)
 
-            p_start, p_end = attendo_period_bounds(now_dt)
-            if profile and profile.current:
-                try:
-                    p_start = datetime.date.fromisoformat(profile.current.start[:10])
-                    p_end = datetime.date.fromisoformat(profile.current.end[:10])
-                except ValueError:
-                    pass
+            provisional_linked = LinkedAccountsState(
+                attendo_linked=profile is not None,
+                current_period=profile.current if profile else None,
+                previous_period=profile.previous if profile else None,
+            )
+            p_start, p_end = resolve_period_bounds(
+                now_dt=now_dt,
+                linked=provisional_linked,
+                period_start_weekday=period_start_weekday,
+                cached_period_start=cached_period_start,
+                cached_period_end=cached_period_end,
+            )
+            p_end_upper = max(p_end, today).isoformat()
             w_start = today - datetime.timedelta(days=today.weekday())
             m_start = today.replace(day=1)
 
             intra_period = sum(
                 sec for d_str, sec in daily_map.items()
-                if p_start.isoformat() <= d_str <= p_end.isoformat()
+                if p_start.isoformat() <= d_str <= p_end_upper
             )
             intra_week = sum(
                 sec for d_str, sec in daily_map.items()
@@ -408,6 +462,9 @@ class AccountLinker:
         attendo_token: str,
         intra_cookie: str,
         on_result: Callable[[LinkedAccountsState], None],
+        period_start_weekday: Optional[int] = None,
+        cached_period_start: str = '',
+        cached_period_end: str = '',
     ) -> None:
         def worker() -> None:
             try:
@@ -416,6 +473,9 @@ class AccountLinker:
                     intra_login=intra_login,
                     attendo_token=attendo_token,
                     intra_cookie=intra_cookie,
+                    period_start_weekday=period_start_weekday,
+                    cached_period_start=cached_period_start,
+                    cached_period_end=cached_period_end,
                 )
             except Exception as exc:
                 state = LinkedAccountsState(

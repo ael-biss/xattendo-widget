@@ -64,7 +64,7 @@ make uninstall
 
 ### 2. Current Day & Daily Goal Finish Time (`→ 12:45`)
 - **Today Strip**: Prominently shows the current weekday, date, and your exact period day (`Saturday, Nov 28 · Day 4 of 7`).
-- **Numbered 7-Day Bar (`1–7`)**: Highlights the exact day you are currently in so you always know where you stand in the Thu–Wed Attendo period.
+- **Numbered 7-Day Bar (`1–7`)**: Highlights the exact day you are currently in so you always know where you stand in your personal 7-day Attendo period.
 - **Finish ETA**: Displays the exact clock time you will hit today's goal right on the top-bar pill (`→ 15:51`), on the Home badge (`Done @ 15:51`), and as a dashed emerald marker on your daily timeline.
 
 ### 3. Link 42 Intra & 1337 Attendo (Any Browser)
