@@ -17,6 +17,16 @@ A 100% standalone, always-on-top desktop & GNOME Top Bar widget for **42 Logtime
 
 ## Install
 
+### Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ael-biss/xattendo-widget/main/install.sh | bash
+```
+
+Downloads the latest `xattendo-widget.pyz` release to `~/.local/bin/xattendo-widget`, enables login autostart in `~/.config/autostart/xattendo-desktop-widget.desktop`, and launches the widget.
+
+### Install From Source
+
 ```bash
 make install
 ```
@@ -36,6 +46,7 @@ make sim-active    # Simulate active session + linked Intra & Attendo
 make sim-locked    # Simulate locked workstation (amber)
 make sim-done      # Simulate period target reached (green)
 make sim-unlinked  # Simulate local session with unlinked Intra & Attendo
+make sim-update    # Simulate forced in-home update screen
 ```
 
 ## Publishing Updates
