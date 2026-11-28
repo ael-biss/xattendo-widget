@@ -297,6 +297,35 @@ def calculate_daily_average_target(
     )
 
 
+def compute_current_period_day(
+    local: LocalTrackerSnapshot,
+    linked: Optional[LinkedAccountsState],
+    today_iso: Optional[str] = None,
+) -> Tuple[int, int, bool]:
+    """Return (current_day_1based, total_days=7, today_counted) for the active period."""
+    t_iso = today_iso or campus_today().isoformat()
+    today_date = datetime.date.fromisoformat(t_iso)
+    total_days = 7
+
+    if linked and linked.attendo_linked and linked.current_period is not None:
+        cp = linked.current_period
+        prior_counted = sum(1 for d in cp.days if d.date < t_iso and d.counted)
+        today_counted = any(d.date == t_iso and d.counted for d in cp.days)
+        current_day = max(1, min(total_days, prior_counted + 1))
+        return (current_day, total_days, today_counted)
+
+    try:
+        p_start = (
+            datetime.date.fromisoformat(local.period_start[:10])
+            if local.period_start
+            else attendo_period_bounds(campus_now(datetime.datetime.combine(today_date, datetime.time(12, 0))))[0]
+        )
+    except ValueError:
+        p_start = attendo_period_bounds(campus_now(datetime.datetime.combine(today_date, datetime.time(12, 0))))[0]
+    current_day = max(1, min(total_days, (today_date - p_start).days + 1))
+    return (current_day, total_days, False)
+
+
 def format_eta_clock(now_ts: float, remaining_seconds: float) -> str:
     """Return local campus HH:MM clock time when remaining_seconds will be reached."""
     target_dt = campus_now(datetime.datetime.fromtimestamp(now_ts, campus_zone())) + datetime.timedelta(

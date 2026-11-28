@@ -39,7 +39,7 @@ class OnboardingWindow(Gtk.Window):
         self._slide_bullets: List[List[Gtk.Label]] = []
         self._ltr_widgets: List[Gtk.Widget] = []
 
-        self.set_default_size(520, 500)
+        self.set_default_size(520, 530)
         self.set_resizable(False)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.get_style_context().add_class('xattendo-window')
@@ -244,8 +244,21 @@ class OnboardingWindow(Gtk.Window):
         return self._build_slide_shell(wrap, bullet_count=3)
 
     def _build_slide_2(self) -> Gtk.Widget:
-        """Slide 2: Attendo Period & Sessions."""
+        """Slide 2: Current Day, Attendo Period & Sessions."""
         wrap = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+        today_strip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
+        today_strip.get_style_context().add_class('xattendo-today-strip')
+        dot = Gtk.Label(label='●')
+        dot.get_style_context().add_class('xattendo-today-dot')
+        date_lbl = Gtk.Label(label='Saturday, Nov 28', xalign=0)
+        date_lbl.get_style_context().add_class('xattendo-today-date')
+        day_pill = Gtk.Label(label='Day 4 of 7', xalign=1)
+        day_pill.get_style_context().add_class('xattendo-day-pill')
+        today_strip.pack_start(dot, False, False, 0)
+        today_strip.pack_start(date_lbl, True, True, 0)
+        today_strip.pack_end(day_pill, False, False, 0)
+        self._ltr_widgets.append(today_strip)
 
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         net_lbl = Gtk.Label(label='9h 41m of 30h', xalign=0)
@@ -261,9 +274,10 @@ class OnboardingWindow(Gtk.Window):
         bar.get_style_context().add_class('xattendo-progress')
 
         days_bar = CountedDaysBar()
-        days_bar.set_days(3, 7)
+        days_bar.set_days(3, 7, current_day=4, today_done=False)
         self._ltr_widgets.append(days_bar)
 
+        wrap.pack_start(today_strip, False, False, 0)
         wrap.pack_start(top, False, False, 0)
         wrap.pack_start(bar, False, False, 0)
         wrap.pack_start(days_bar, False, False, 2)

@@ -23,6 +23,7 @@ from xattendo_widget.core.calculator import (
     calculate_goal_progress,
     campus_today,
     clip_and_merge_intervals,
+    compute_current_period_day,
     compute_effective_today_metrics,
     format_compact_hours,
     format_dec_hours,
@@ -31,7 +32,7 @@ from xattendo_widget.core.calculator import (
     format_hms,
     merge_period_progress,
 )
-from xattendo_widget.i18n import STRINGS, format_date, is_rtl, normalize_lang, tr
+from xattendo_widget.i18n import STRINGS, format_date, format_short_date, is_rtl, normalize_lang, tr
 from xattendo_widget.models import UserConfig
 from xattendo_widget.services.account_linker import (
     format_cookie_header,
@@ -151,6 +152,11 @@ class TestXattendoWidget(unittest.TestCase):
                     self.assertTrue(pill.eta_lbl.get_text().startswith('→ '))
                 pill.popup_win.toggle_near(pill, pill.local_snapshot, pill.linked_state)
                 self.assertTrue(pill.popup_win.get_visible())
+                self.assertTrue(len(pill.popup_win.today_date_lbl.get_text()) > 3)
+                self.assertIn('of 7', pill.popup_win.today_day_pill.get_text())
+                self.assertIsNotNone(pill.popup_win.days_bar._current_day)
+                self.assertGreaterEqual(pill.popup_win.days_bar._current_day, 1)
+                self.assertLessEqual(pill.popup_win.days_bar._current_day, 7)
                 if mode == 'active':
                     self.assertTrue(pill.popup_win.hero_ratio_lbl.get_visible())
                     self.assertTrue(pill.popup_win.hero_eta_badge.get_visible())
@@ -534,6 +540,17 @@ class TestXattendoWidget(unittest.TestCase):
         self.assertEqual(normalize_lang('FR'), 'fr')
         self.assertEqual(tr('en', 'logtime_title'), 'Logtime')
         self.assertTrue(len(format_date(campus_today(), 'ar')) > 0)
+        for lang_code in ('en', 'fr', 'ar'):
+            self.assertTrue(len(format_short_date(datetime.date(2026, 11, 28), lang_code)) > 3)
+
+        # Current period day helper: linked vs unlinked
+        local_d, linked_d = build_simulated_local_and_linked('active')
+        self.assertEqual(compute_current_period_day(local_d, linked_d), (4, 7, False))
+        local_done, linked_done = build_simulated_local_and_linked('done')
+        self.assertEqual(compute_current_period_day(local_done, linked_done), (5, 7, False))
+        local_u, _ = build_simulated_local_and_linked('unlinked')
+        local_u.period_start = '2026-11-26'
+        self.assertEqual(compute_current_period_day(local_u, None, today_iso='2026-11-28'), (3, 7, False))
 
     def test_x11_topbar_structs_and_masks(self):
         buf = (ctypes.c_ubyte * 4)()

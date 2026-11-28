@@ -14,6 +14,8 @@ from xattendo_widget.constants import ATTENDO_LOGIN_URL, ATTENDO_PROFILE_URL, IN
 from xattendo_widget.core.calculator import (
     build_day_active_segments,
     calculate_daily_average_target,
+    campus_now,
+    compute_current_period_day,
     compute_effective_today_metrics,
     format_compact_hours,
     format_eta_clock,
@@ -21,7 +23,7 @@ from xattendo_widget.core.calculator import (
     format_hms,
     merge_period_progress,
 )
-from xattendo_widget.i18n import is_rtl, tr
+from xattendo_widget.i18n import format_short_date, is_rtl, tr
 from xattendo_widget.models import LinkedAccountsState, LocalTrackerSnapshot
 from xattendo_widget.services.config_service import ConfigService
 from xattendo_widget.services.update_service import UpdateInfo, UpdateService
@@ -177,6 +179,22 @@ class PopupWindow(Gtk.Window):
         self.update_banner_box.pack_start(self.update_banner_lbl, True, True, 0)
         self.update_banner_box.pack_end(self.update_banner_btn, False, False, 0)
         page.pack_start(self.update_banner_box, False, False, 0)
+
+        # Current Day Strip: ● Saturday, Nov 28   [Day 4 of 7]
+        today_strip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
+        today_strip.get_style_context().add_class('xattendo-today-strip')
+        self.today_dot_lbl = Gtk.Label(label='●')
+        self.today_dot_lbl.get_style_context().add_class('xattendo-today-dot')
+        self.today_dot_lbl.set_valign(Gtk.Align.CENTER)
+        self.today_date_lbl = Gtk.Label(label='—', xalign=0)
+        self.today_date_lbl.get_style_context().add_class('xattendo-today-date')
+        self.today_day_pill = Gtk.Label(label='', xalign=1)
+        self.today_day_pill.get_style_context().add_class('xattendo-day-pill')
+        self.today_day_pill.set_valign(Gtk.Align.CENTER)
+        today_strip.pack_start(self.today_dot_lbl, False, False, 0)
+        today_strip.pack_start(self.today_date_lbl, True, True, 0)
+        today_strip.pack_end(self.today_day_pill, False, False, 0)
+        page.pack_start(today_strip, False, False, 0)
 
         # Hero Panel: Today's active time + clock + bar + pace ETA + timeline + 3 inset cards
         self.hero_panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -736,6 +754,17 @@ class PopupWindow(Gtk.Window):
             today_net,
             fallback_target_hours=cfg.period_target_hours,
         )
+        day_num, total_days, today_counted = compute_current_period_day(local, linked)
+        self.today_date_lbl.set_text(
+            format_short_date(campus_now(datetime.datetime.fromtimestamp(local.now_ts)), lang)
+        )
+        self.today_day_pill.set_text(tr(lang, 'day_of_period_pill', day=day_num, total=total_days))
+        for w in (self.today_dot_lbl, self.today_day_pill):
+            w_ctx = w.get_style_context()
+            if daily.done or today_counted:
+                w_ctx.add_class('done')
+            else:
+                w_ctx.remove_class('done')
 
         self.hero_clock.set_text(format_hms(today_net))
         if daily.daily_target_seconds > 0:
@@ -847,12 +876,17 @@ class PopupWindow(Gtk.Window):
             cp = linked.current_period
             self.attendo_val_lbl.set_text(format_compact_hours(cp.total * 3600.0))
             self.attendo_days_lbl.set_text(tr(lang, 'days_of_seven', counted=cp.counted_days))
-            self.days_bar.set_days(cp.counted_days, 7)
+            self.days_bar.set_days(
+                cp.counted_days,
+                7,
+                current_day=day_num,
+                today_done=bool(daily.done or today_counted),
+            )
             self.attendo_link_btn.hide()
         else:
             self.attendo_val_lbl.set_text('—')
             self.attendo_days_lbl.set_text(tr(lang, 'not_linked_badge'))
-            self.days_bar.set_days(0, 7)
+            self.days_bar.set_days(0, 7, current_day=day_num, today_done=daily.done)
             self.attendo_link_btn.set_label(tr(lang, 'link_btn'))
             self.attendo_link_btn.show()
 

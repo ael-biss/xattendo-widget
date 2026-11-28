@@ -199,23 +199,23 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'guide_s1_sub': 'Your live logtime sits quietly in the GNOME top bar (or floats on desktop).',
         'guide_s1_b1': 'Left-click the pill to open the Overview & Sessions dashboard.',
         'guide_s1_b2': 'Drag left/right to reposition it, or click the Pin icon to lock it.',
-        'guide_s1_b3': 'Right-click the pill anytime to open Settings.',
+        'guide_s1_b3': 'Right-click the pill to open Settings — click anywhere outside to close.',
         'guide_s1_b4': 'Colors tell you your state: Blue (Active), Amber (Locked), Green (Goal Done).',
         'guide_s2_title': '2. Daily Goal & Finish Time',
         'guide_s2_sub': 'Know exactly when you can finish today without doing mental math.',
         'guide_s2_b1': 'Active time automatically excludes screen-lock breaks.',
         'guide_s2_b2': 'Daily target = remaining period hours divided by remaining days.',
         'guide_s2_b3': 'The → 12:45 indicator shows your exact finish time at your current pace.',
-        'guide_s3_title': '3. Attendo Period & History',
-        'guide_s3_sub': 'Track your 7-day Thu–Wed Attendo period and daily logs in one place.',
-        'guide_s3_b1': 'Progress bar tracks your 30h period target and counted days (0–7).',
+        'guide_s3_title': '3. Current Day, Period & History',
+        'guide_s3_sub': 'See the exact day you are in and track your 7-day Thu–Wed Attendo period.',
+        'guide_s3_b1': 'The Today strip (Day X of 7) and numbered 1–7 bar highlight your current day.',
         'guide_s3_b2': 'Combines local X11 session tracking with official 42 Intra & Attendo.',
         'guide_s3_b3': 'Open Full History to inspect past sessions, periods, and lock logs.',
         'guide_s4_title': '4. Link Accounts (Any Browser)',
         'guide_s4_sub': 'Sync your 42 Intra and 1337 Attendo in one step.',
         'guide_s4_b1': 'Auto-detects sessions from Brave, Firefox, Chrome, Zen, Vivaldi, Edge & Opera.',
         'guide_s4_b2': 'Using another browser? Click Sign in above once to link both accounts.',
-        'guide_s4_b3': 'You can reopen this Quick Guide anytime from Settings.',
+        'guide_s4_b3': 'Updates prompt right in Home for 1-click install; reopen this guide anytime from Settings.',
         # Forced & In-Home Update Notifications
         'update_required_title': 'Update Required',
         'update_required_desc': 'A new version of Xattendo Widget is available. Update now to continue using the app.',
@@ -227,6 +227,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'notif_force_update_title': 'Xattendo Update Required',
         'notif_force_update_body': 'Version {version} is required. Open the widget to update now.',
         'update_simulated_ok': 'Simulated update to {version} succeeded!',
+        'day_of_period_pill': 'Day {day} of {total}',
     },
     'fr': {
         'app_name': 'Xattendo Desktop Widget',
@@ -398,23 +399,23 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'guide_s1_sub': 'Votre temps actif reste visible dans la barre GNOME (ou flottant).',
         'guide_s1_b1': 'Clic gauche sur la pilule pour ouvrir Aperçu & Sessions.',
         'guide_s1_b2': 'Glissez gauche/droite pour déplacer, ou épinglez pour verrouiller.',
-        'guide_s1_b3': 'Clic droit à tout moment pour ouvrir les Paramètres.',
+        'guide_s1_b3': 'Clic droit pour ouvrir les Paramètres — cliquez ailleurs pour fermer.',
         'guide_s1_b4': 'Couleurs : Bleu (Actif), Ambre (Verrouillé), Vert (Objectif atteint).',
         'guide_s2_title': '2. Objectif du jour & Heure de fin',
         'guide_s2_sub': 'Voyez exactement à quelle heure vous terminez votre journée.',
         'guide_s2_b1': 'Le temps actif exclut automatiquement les pauses écran verrouillé.',
         'guide_s2_b2': 'Objectif du jour = heures restantes ÷ jours restants.',
         'guide_s2_b3': "L'indicateur → 12:45 affiche votre heure de fin estimée.",
-        'guide_s3_title': '3. Période Attendo & Historique',
-        'guide_s3_sub': 'Suivez votre période Jeu–Mer et vos sessions quotidiennes.',
-        'guide_s3_b1': 'La barre suit votre objectif de 30h et les jours comptés (0–7).',
+        'guide_s3_title': '3. Jour actuel, Période & Historique',
+        'guide_s3_sub': 'Voyez clairement votre jour actuel et suivez votre période Jeu–Mer.',
+        'guide_s3_b1': 'La barre du jour (Jour X sur 7) et les segments 1–7 mettent en avant aujourd’hui.',
         'guide_s3_b2': 'Fusionne le suivi local X11 avec 42 Intra et 1337 Attendo.',
         'guide_s3_b3': "Ouvrez l'Historique complet pour voir sessions, périodes et verrous.",
         'guide_s4_title': '4. Lier vos comptes (Tout navigateur)',
         'guide_s4_sub': 'Synchronisez 42 Intra et 1337 Attendo en une étape.',
         'guide_s4_b1': 'Détection auto depuis Brave, Firefox, Chrome, Zen, Vivaldi, Edge & Opera.',
         'guide_s4_b2': 'Autre navigateur ? Cliquez sur Connexion ci-dessus pour lier les deux.',
-        'guide_s4_b3': 'Vous pouvez rouvrir ce guide à tout moment depuis les Paramètres.',
+        'guide_s4_b3': 'Les mises à jour s’installent en 1 clic depuis l’accueil ; rouvrez ce guide dans Paramètres.',
         # Mises à jour forcées & accueil
         'update_required_title': 'Mise à jour requise',
         'update_required_desc': 'Une nouvelle version de Xattendo Widget est disponible. Mettez à jour pour continuer.',
@@ -426,6 +427,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'notif_force_update_title': 'Mise à jour Xattendo requise',
         'notif_force_update_body': 'La version {version} est requise. Ouvrez le widget pour mettre à jour.',
         'update_simulated_ok': 'Mise à jour simulée vers {version} réussie !',
+        'day_of_period_pill': 'Jour {day} sur {total}',
     },
     'ar': {
         'app_name': 'ودجت حضور إكس-أتندو',
@@ -597,23 +599,23 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'guide_s1_sub': 'يظهر وقتك النشط في الشريط العلوي لـ GNOME (أو كودجت عائم).',
         'guide_s1_b1': 'انقر بزر الفأرة الأيسر لفتح لوحة النظرة العامة والجلسات.',
         'guide_s1_b2': 'اسحب يميناً أو يساراً لتغيير الموضع، أو اضغط أيقونة التثبيت لقفل مكانه.',
-        'guide_s1_b3': 'انقر بزر الفأرة الأيمن في أي وقت لفتح الإعدادات.',
+        'guide_s1_b3': 'انقر بزر الفأرة الأيمن لفتح الإعدادات — وانقر في أي مكان خارجها للإغلاق.',
         'guide_s1_b4': 'الألوان توضح حالتك: أزرق (نشط)، كهرماني (مقفل)، أخضر (تم الهدف).',
         'guide_s2_title': '2. الهدف اليومي ووقت الانتهاء',
         'guide_s2_sub': 'اعرف بالضبط متى ستنهي هدفك اليومي دون حسابات يدوية.',
         'guide_s2_b1': 'الوقت النشط يستثني فترات قفل الشاشة تلقائياً.',
         'guide_s2_b2': 'الهدف اليومي = الساعات المتبقية للفترة ÷ الأيام المتبقية.',
         'guide_s2_b3': 'المؤشر → 12:45 يعرض وقت الانتهاء المتوقع حسب وتيرتك الحالية.',
-        'guide_s3_title': '3. فترة أتندو والسجل',
-        'guide_s3_sub': 'تابع فترة 7 أيام (الخميس–الأربعاء) وسجل جلساتك اليومية.',
-        'guide_s3_b1': 'شريط التقدم يتابع هدف 30 ساعة والأيام المحتسبة (0–7).',
+        'guide_s3_title': '3. اليوم الحالي والفترة والسجل',
+        'guide_s3_sub': 'اعرف يومك الحالي بوضوح وتابع فترة 7 أيام (الخميس–الأربعاء).',
+        'guide_s3_b1': 'شريط اليوم (اليوم X من 7) والأرقام 1–7 تبرز يومك الحالي بوضوح.',
         'guide_s3_b2': 'يدمج التتبع المحلي X11 مع بيانات 42 Intra و 1337 Attendo الرسمية.',
         'guide_s3_b3': 'افتح السجل الكامل لمراجعة الجلسات والفترات وأوقات القفل.',
         'guide_s4_title': '4. ربط الحسابات (أي متصفح)',
         'guide_s4_sub': 'قم بمزامنة 42 Intra و 1337 Attendo في خطوة واحدة.',
         'guide_s4_b1': 'قراءة تلقائية من Brave و Firefox و Chrome و Zen و Vivaldi و Edge و Opera.',
         'guide_s4_b2': 'تستخدم متصفحاً آخر؟ اضغط تسجيل الدخول أعلاه لربط الحسابين معاً.',
-        'guide_s4_b3': 'يمكنك إعادة فتح هذا الدليل في أي وقت من الإعدادات.',
+        'guide_s4_b3': 'تظهر التحديثات في الصفحة الرئيسية للتثبيت بنقرة واحدة؛ ويمكنك إعادة فتح الدليل من الإعدادات.',
         # تحديثات إجبارية وإشعارات الصفحة الرئيسية
         'update_required_title': 'تحديث مطلوب',
         'update_required_desc': 'يتوفر إصدار جديد من Xattendo Widget. حدّث الآن للمتابعة.',
@@ -625,6 +627,7 @@ STRINGS: Dict[str, Dict[str, str]] = {
         'notif_force_update_title': 'تحديث Xattendo مطلوب',
         'notif_force_update_body': 'الإصدار {version} مطلوب. افتح الودجت للتحديث الآن.',
         'update_simulated_ok': 'نجح التحديث التجريبي إلى {version}!',
+        'day_of_period_pill': 'اليوم {day} من {total}',
     },
 }
 
@@ -654,3 +657,14 @@ def format_date(dt: Union[datetime.datetime, datetime.date], lang: str) -> str:
     if norm == 'fr':
         return f'{FR_WEEKDAYS[wd]} {dt.day} {FR_MONTHS[mo]} {dt.year}'
     return f'{EN_WEEKDAYS[wd]}, {EN_MONTHS[mo]} {dt.day}, {dt.year}'
+
+
+def format_short_date(dt: Union[datetime.datetime, datetime.date], lang: str) -> str:
+    norm = normalize_lang(lang)
+    wd = dt.weekday()
+    mo = dt.month - 1
+    if norm == 'ar':
+        return f'{AR_WEEKDAYS[wd]}، {dt.day} {AR_MONTHS[mo]}'
+    if norm == 'fr':
+        return f'{FR_WEEKDAYS[wd]} {dt.day} {FR_MONTHS[mo]}'
+    return f'{EN_WEEKDAYS[wd]}, {EN_MONTHS[mo][:3]} {dt.day}'

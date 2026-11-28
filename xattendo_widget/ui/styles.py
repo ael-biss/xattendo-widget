@@ -475,6 +475,46 @@ window.xattendo-window {
     padding: 8px 10px;
 }
 
+/* Current Day Strip */
+.xattendo-today-strip {
+    background-color: #141c27;
+    border: 1px solid #243347;
+    border-radius: 10px;
+    padding: 7px 12px;
+}
+
+.xattendo-today-dot {
+    color: #38bdf8;
+    font-size: 10px;
+}
+
+.xattendo-today-dot.done {
+    color: #34d399;
+}
+
+.xattendo-today-date {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #f0f6fc;
+}
+
+.xattendo-day-pill {
+    font-family: "JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #38bdf8;
+    background-color: #102a3c;
+    border: 1px solid #1e4d6b;
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.xattendo-day-pill.done {
+    color: #34d399;
+    background-color: #0e2920;
+    border-color: #235334;
+}
+
 .xattendo-decimal-badge {
     background-color: #102a3c;
     color: #38bdf8;

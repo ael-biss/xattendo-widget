@@ -298,38 +298,88 @@ class DayTimeline(Gtk.DrawingArea):
 
 
 class CountedDaysBar(Gtk.DrawingArea):
-    """7-segment horizontal progress indicator for counted Attendo days."""
+    """7-segment horizontal progress indicator with numbered days and clear current-day highlight."""
 
     def __init__(self) -> None:
         super().__init__()
         self._counted = 0
         self._total = 7
-        self.set_size_request(-1, 6)
+        self._current_day: Optional[int] = None
+        self._today_done = False
+        self.set_size_request(-1, 22)
         self.connect('draw', self._on_draw)
 
-    def set_days(self, counted: int, total: int = 7) -> None:
+    def set_days(
+        self,
+        counted: int,
+        total: int = 7,
+        current_day: Optional[int] = None,
+        today_done: bool = False,
+    ) -> None:
         self._counted = max(0, int(counted))
         self._total = max(1, int(total))
+        self._current_day = (
+            max(1, min(self._total, int(current_day)))
+            if current_day is not None
+            else None
+        )
+        self._today_done = bool(today_done)
         self.queue_draw()
 
     def _on_draw(self, _widget, ctx: cairo.Context) -> bool:
         w = float(self.get_allocated_width())
         h = float(self.get_allocated_height())
-        if w <= 10 or h <= 2:
+        if w <= 10 or h <= 4:
             return False
 
         gap = 4.0
-        seg_h = min(4.0, h)
-        y = (h - seg_h) / 2.0
+        seg_h = 5.0
+        y = 2.0
         seg_w = max(4.0, (w - gap * (self._total - 1)) / self._total)
+        cur_idx = (self._current_day - 1) if self._current_day is not None else -1
+
+        ctx.select_font_face('DejaVu Sans Mono', cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        ctx.set_font_size(9.0)
 
         for i in range(self._total):
             x = i * (seg_w + gap)
-            if i < self._counted:
+            is_cur = (i == cur_idx)
+            is_counted = (i < self._counted)
+
+            if is_cur:
+                if self._today_done or is_counted:
+                    ctx.set_source_rgb(0.204, 0.827, 0.600)  # #34d399 emerald
+                    _rounded_rect(ctx, x, y, seg_w, seg_h, 2.5)
+                    ctx.fill()
+                    ctx.set_source_rgb(0.431, 0.906, 0.718)
+                else:
+                    ctx.set_source_rgb(0.090, 0.216, 0.322)  # #173752 active today fill
+                    _rounded_rect(ctx, x, y, seg_w, seg_h, 2.5)
+                    ctx.fill()
+                    ctx.set_source_rgb(0.490, 0.827, 0.988)  # #7dd3fc bright cyan border
+                ctx.set_line_width(1.2)
+                _rounded_rect(ctx, x + 0.5, y + 0.5, max(2.0, seg_w - 1.0), seg_h - 1.0, 2.2)
+                ctx.stroke()
+            elif is_counted:
                 ctx.set_source_rgb(0.294, 0.722, 0.941)  # #4bb8f0
+                _rounded_rect(ctx, x, y, seg_w, seg_h, 2.5)
+                ctx.fill()
             else:
                 ctx.set_source_rgb(0.153, 0.204, 0.275)  # #273446
-            _rounded_rect(ctx, x, y, seg_w, seg_h, 2.0)
-            ctx.fill()
+                _rounded_rect(ctx, x, y, seg_w, seg_h, 2.5)
+                ctx.fill()
+
+            num_str = str(i + 1)
+            ext = ctx.text_extents(num_str)
+            tx = x + (seg_w - ext.width) / 2.0 - ext.x_bearing
+            ty = y + seg_h + 10.5
+            if is_cur:
+                ctx.set_source_rgb(0.941, 0.965, 0.988)  # #f0f6fc bright white
+            elif is_counted:
+                ctx.set_source_rgb(0.545, 0.592, 0.659)  # #8b97a8
+            else:
+                ctx.set_source_rgb(0.392, 0.455, 0.545)  # #64748b
+            ctx.move_to(tx, ty)
+            ctx.show_text(num_str)
 
         return False
