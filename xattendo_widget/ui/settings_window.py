@@ -35,6 +35,8 @@ class SettingsWindow(Gtk.Window):
         on_top_bar_preset: Optional[Callable[[str], None]] = None,
         on_reload_app: Optional[Callable[[], None]] = None,
         on_quit_app: Optional[Callable[[], None]] = None,
+        on_open_web_login: Optional[Callable[[str], None]] = None,
+        is_child_modal_open: Optional[Callable[[], bool]] = None,
     ) -> None:
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.config_service = config_service
@@ -46,6 +48,8 @@ class SettingsWindow(Gtk.Window):
         self.on_top_bar_preset = on_top_bar_preset
         self.on_reload_app = on_reload_app
         self.on_quit_app = on_quit_app
+        self.on_open_web_login = on_open_web_login
+        self._is_child_modal_open = is_child_modal_open
 
         self._lang_buttons: Dict[str, Gtk.Button] = {}
         self._preset_buttons: Dict[str, Gtk.Button] = {}
@@ -186,6 +190,14 @@ class SettingsWindow(Gtk.Window):
         pin_row.pack_end(self.pin_switch, False, False, 0)
         box.pack_start(pin_row, False, False, 0)
 
+        eta_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.show_pill_eta_lbl = Gtk.Label(xalign=0)
+        self.show_pill_eta_lbl.get_style_context().add_class('xattendo-field-label')
+        self.show_pill_eta_switch = Gtk.Switch()
+        eta_row.pack_start(self.show_pill_eta_lbl, True, True, 0)
+        eta_row.pack_end(self.show_pill_eta_switch, False, False, 0)
+        box.pack_start(eta_row, False, False, 0)
+
         self.topbar_hint_lbl = Gtk.Label(xalign=0)
         self.topbar_hint_lbl.set_line_wrap(True)
         self.topbar_hint_lbl.set_max_width_chars(46)
@@ -247,6 +259,18 @@ class SettingsWindow(Gtk.Window):
         status_row.pack_start(self.acc_status_lbl, True, True, 0)
         status_row.pack_end(self.sync_now_btn, False, False, 0)
         box.pack_start(status_row, False, False, 0)
+
+        # Universal One-Click Login (works with any browser)
+        self.web_login_btn = Gtk.Button()
+        self.web_login_btn.get_style_context().add_class('xattendo-btn-primary')
+        self.web_login_btn.connect('clicked', self._on_web_login_clicked)
+        box.pack_start(self.web_login_btn, False, False, 0)
+
+        self.web_login_hint_lbl = Gtk.Label(xalign=0)
+        self.web_login_hint_lbl.set_line_wrap(True)
+        self.web_login_hint_lbl.set_max_width_chars(46)
+        self.web_login_hint_lbl.get_style_context().add_class('xattendo-hint')
+        box.pack_start(self.web_login_hint_lbl, False, False, 0)
 
         # Browser quick-open links
         link_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -465,6 +489,7 @@ class SettingsWindow(Gtk.Window):
         self.topbar_sec_title.set_text(tr(norm, 'sec_top_bar'))
         self.topbar_mode_lbl.set_text(tr(norm, 'dock_top_bar'))
         self.pin_pos_lbl.set_text(tr(norm, 'pin_position_toggle'))
+        self.show_pill_eta_lbl.set_text(tr(norm, 'show_pill_eta_toggle'))
         self.topbar_hint_lbl.set_text(tr(norm, 'top_bar_hint'))
         self._preset_buttons['left'].set_label(tr(norm, 'preset_left'))
         self._preset_buttons['center_right'].set_label(tr(norm, 'preset_center_right'))
@@ -477,6 +502,8 @@ class SettingsWindow(Gtk.Window):
 
         self.acc_sec_title.set_text(tr(norm, 'sec_accounts'))
         self.sync_now_btn.set_label(tr(norm, 'sync_now_btn'))
+        self.web_login_btn.set_label(tr(norm, 'web_login_btn'))
+        self.web_login_hint_lbl.set_text(tr(norm, 'web_login_hint'))
         self.open_intra_btn.set_label(tr(norm, 'open_intra_btn'))
         self.open_attendo_btn.set_label(tr(norm, 'open_attendo_btn'))
         self.browser_lbl.set_text(tr(norm, 'browser_pref_label'))
@@ -560,6 +587,7 @@ class SettingsWindow(Gtk.Window):
         cfg = self.config_service.config
         self.top_bar_switch.set_active(cfg.top_bar_mode)
         self.pin_switch.set_active(cfg.position_locked)
+        self.show_pill_eta_switch.set_active(cfg.show_pill_eta)
         self.preset_row.set_sensitive(cfg.top_bar_mode)
         self._select_pill_mode(cfg.pill_display_mode)
         self._select_browser(cfg.browser_preference)
@@ -580,6 +608,7 @@ class SettingsWindow(Gtk.Window):
 
         cfg.top_bar_mode = self.top_bar_switch.get_active()
         cfg.position_locked = self.pin_switch.get_active()
+        cfg.show_pill_eta = self.show_pill_eta_switch.get_active()
         cfg.pill_display_mode = self._draft_mode
         cfg.browser_preference = self._draft_browser
         cfg.intra_login = self.intra_login_entry.get_text().strip()
@@ -599,13 +628,42 @@ class SettingsWindow(Gtk.Window):
             self.config_service.save(notify=True)
             self.on_sync_accounts()
 
+    def _on_web_login_clicked(self, _btn: Gtk.Button) -> None:
+        if self.on_open_web_login is not None:
+            self.on_open_web_login('both')
+        else:
+            self.on_open_url(ATTENDO_LOGIN_URL)
+
+    def sync_captured_credentials(self) -> None:
+        if self.get_visible():
+            self.attendo_token_entry.set_text(self.config_service.config.attendo_token or '')
+
     @property
     def is_modal_open(self) -> bool:
-        return False
+        return bool(self._is_child_modal_open()) if self._is_child_modal_open else False
+
+    def contains_screen_point(self, lx: int, ly: int) -> bool:
+        if not self.get_visible():
+            return False
+        gdk_win = self.get_window()
+        if gdk_win is not None:
+            rect = gdk_win.get_frame_extents()
+            return (rect.x <= lx <= rect.x + rect.width) and (rect.y <= ly <= rect.y + rect.height)
+        px, py = self.get_position()
+        pw, ph = self.get_size()
+        return (px <= lx <= px + pw) and (py <= ly <= py + ph)
 
     def _on_focus_out(self, _widget, _event) -> bool:
-        if not self.get_visible() or (time.monotonic() - self._opened_at) < 0.15:
+        if not self.get_visible() or self.is_modal_open or (time.monotonic() - self._opened_at) < 0.20:
             return False
+        display = Gdk.Display.get_default()
+        if display is not None:
+            seat = display.get_default_seat()
+            pointer = seat.get_pointer() if seat is not None else None
+            if pointer is not None:
+                _screen, px, py = pointer.get_position()
+                if self.contains_screen_point(px, py):
+                    return False
         self.close_window()
         return False
 
@@ -628,4 +686,4 @@ class SettingsWindow(Gtk.Window):
         self._opened_at = time.monotonic()
         self._sync_from_config()
         self.show_all()
-        self.present()
+        self.present_with_time(Gtk.get_current_event_time() or Gdk.CURRENT_TIME)

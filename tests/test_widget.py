@@ -38,6 +38,8 @@ from xattendo_widget.services.account_linker import (
     parse_intra_locations_json,
 )
 from xattendo_widget.services.browser_cookies import (
+    _browser_order,
+    _chromium_cookie_files,
     _derive_chromium_key,
     _read_chromium_db_version,
     decrypt_chromium_value,
@@ -50,6 +52,7 @@ from xattendo_widget.services.session_tracker import (
     normalize_and_sum_locks,
 )
 from xattendo_widget.services.update_service import is_newer_version, parse_semver
+from xattendo_widget.ui.web_login_window import format_cookie_header
 from xattendo_widget.services.x11_topbar import (
     XI_RAW_BUTTON_PRESS,
     XI_RAW_BUTTON_RELEASE,
@@ -127,23 +130,31 @@ class TestXattendoWidget(unittest.TestCase):
         from xattendo_widget.ui.styles import install_css
 
         install_css()
+        from xattendo_widget.ui.ring_widget import HeaderIcon
         for mode, expect_done in (('active', False), ('done', True)):
             ctrl = AppController(simulate=mode)
             try:
                 pill = ctrl.pill
                 self.assertIsNotNone(pill)
                 self.assertEqual(pill.popup_win.version_lbl.get_text(), f'v{__version__}')
+                self.assertIsInstance(pill.popup_win.pin_icon, HeaderIcon)
+                self.assertIsInstance(pill.popup_win.refresh_icon, HeaderIcon)
                 self.assertEqual(pill.name_lbl.get_visible(), expect_done)
                 self.assertEqual(pill.ring_widget._state, 'done' if expect_done else 'active')
+                if mode == 'active':
+                    self.assertTrue(pill.eta_lbl.get_visible())
+                    self.assertTrue(pill.eta_lbl.get_text().startswith('→ '))
                 pill.popup_win.toggle_near(pill, pill.local_snapshot, pill.linked_state)
                 self.assertTrue(pill.popup_win.get_visible())
                 if mode == 'active':
                     self.assertTrue(pill.popup_win.hero_ratio_lbl.get_visible())
+                    self.assertTrue(pill.popup_win.hero_eta_badge.get_visible())
                     self.assertNotIn('of 0', pill.popup_win.hero_ratio_lbl.get_text())
                     self.assertTrue(pill.popup_win.period_left_lbl.get_visible())
                 elif mode == 'done':
                     self.assertFalse(pill.popup_win.period_left_lbl.get_visible())
                     self.assertEqual(pill.popup_win.period_left_lbl.get_text(), '')
+                    self.assertTrue(pill.popup_win.hero_eta_badge.get_visible())
                     pill.linked_state.target_hours = 24.0
                     pill.popup_win.update_content(pill.local_snapshot, pill.linked_state)
                     self.assertFalse(pill.popup_win.hero_ratio_lbl.get_visible())
@@ -157,8 +168,13 @@ class TestXattendoWidget(unittest.TestCase):
                     pill.history_win.open_window(pill.local_snapshot, pill.linked_state)
                     self.assertTrue(pill.history_win.get_visible())
                     pill.history_win.hide()
+                    self.assertFalse(pill.settings_win.contains_screen_point(100, 100))
                     pill.settings_win.open_window(pill.linked_state)
                     self.assertTrue(pill.settings_win.get_visible())
+                    self.assertFalse(pill.settings_win.is_modal_open)
+                    pill.settings_win._is_child_modal_open = lambda: True
+                    self.assertTrue(pill.settings_win.is_modal_open)
+                    pill.settings_win._is_child_modal_open = pill.web_login_win.get_visible
                     pill.settings_win.close_window()
             finally:
                 if ctrl.pill is not None:
@@ -420,6 +436,7 @@ class TestXattendoWidget(unittest.TestCase):
             period_target_hours=42.0,
             intra_login='ael-biss',
             attendo_token='tok_xyz',
+            show_pill_eta=False,
             language='fr',
         )
         restored = UserConfig.from_dict(cfg.to_dict())
@@ -429,7 +446,9 @@ class TestXattendoWidget(unittest.TestCase):
         self.assertEqual(restored.period_target_hours, 42.0)
         self.assertEqual(restored.intra_login, 'ael-biss')
         self.assertEqual(restored.attendo_token, 'tok_xyz')
+        self.assertFalse(restored.show_pill_eta)
         self.assertEqual(restored.language, 'fr')
+        self.assertTrue(UserConfig.from_dict({}).show_pill_eta)
 
         clamped = UserConfig.from_dict({
             'refreshIntervalSeconds': 5,
@@ -463,6 +482,20 @@ class TestXattendoWidget(unittest.TestCase):
         self.assertGreaterEqual(ctypes.sizeof(XEvent), 24 * ctypes.sizeof(ctypes.c_long))
         self.assertGreater(ctypes.sizeof(XGenericEventCookie), 0)
         self.assertGreater(ctypes.sizeof(XIRawEvent), 0)
+
+    def test_web_login_cookie_header_and_browser_order(self):
+        hdr = format_cookie_header([
+            ('session_id', 'abc'),
+            ('empty', ''),
+            ('session_id', 'xyz'),
+            ('locale', 'en'),
+        ])
+        self.assertEqual(hdr, 'session_id=xyz; locale=en')
+
+        auto_order = _browser_order('auto')
+        for br in ('brave', 'firefox', 'chrome', 'chromium', 'vivaldi', 'opera', 'edge'):
+            self.assertIn(br, auto_order)
+            self.assertIsInstance(_chromium_cookie_files(br), list)
 
     def test_update_semver_and_simulations(self):
         self.assertEqual(parse_semver('v1.2.3'), (1, 2, 3))

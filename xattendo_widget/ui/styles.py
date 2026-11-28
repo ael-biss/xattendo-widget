@@ -111,6 +111,22 @@ window.xattendo-window {
     font-size: 11.5px;
 }
 
+.xattendo-pill-eta {
+    font-family: "JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+    font-weight: 600;
+    font-size: 11px;
+    color: #38bdf8;
+    margin-left: 2px;
+}
+
+.xattendo-pill.top-bar-mode .xattendo-pill-eta {
+    font-size: 10.5px;
+}
+
+.xattendo-pill.goal-reached .xattendo-pill-eta {
+    color: #3fb950;
+}
+
 /* Popup & Card Surfaces (Minimalist 42 Logtime mockup) */
 .xattendo-card {
     background-color: #10151c;
@@ -315,6 +331,46 @@ window.xattendo-window {
     font-size: 33px;
     font-weight: 800;
     color: #e8eef5;
+}
+
+.xattendo-eta-badge {
+    background-color: #102a3c;
+    border: 1px solid #1e4d6b;
+    color: #38bdf8;
+    border-radius: 7px;
+    padding: 3px 8px;
+    font-family: "JetBrains Mono", "Ubuntu Mono", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.xattendo-eta-badge.done {
+    background-color: #0e2920;
+    border-color: #235334;
+    color: #34d399;
+}
+
+/* Universal Web Login Window */
+.xattendo-login-bar {
+    background-color: #10151c;
+    border-bottom: 1px solid #24303e;
+    padding: 10px 14px;
+}
+
+.xattendo-login-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background-color: #18202c;
+    border: 1px solid #2a3748;
+    color: #8b97a8;
+}
+
+.xattendo-login-pill.linked {
+    background-color: #0e2920;
+    border-color: #235334;
+    color: #34d399;
 }
 
 .xattendo-decimal-badge {

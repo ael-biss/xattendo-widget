@@ -17,11 +17,19 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 def _firefox_profiles() -> List[Path]:
     home = Path.home()
+    xdg_cfg = Path(os.environ.get('XDG_CONFIG_HOME') or home / '.config')
     roots = (
-        Path(os.environ.get('XDG_CONFIG_HOME') or home / '.config') / 'mozilla/firefox',
+        xdg_cfg / 'mozilla/firefox',
         home / '.mozilla/firefox',
         home / 'snap/firefox/common/.mozilla/firefox',
         home / '.var/app/org.mozilla.firefox/config/mozilla/firefox',
+        # Firefox forks (Zen Browser, LibreWolf, Floorp, Waterfox)
+        home / '.zen',
+        home / '.var/app/io.github.zen_browser.zen/.zen',
+        home / '.librewolf',
+        home / '.var/app/io.gitlab.librewolf-community/.librewolf',
+        home / '.floorp',
+        home / '.waterfox',
     )
     profiles: List[Path] = []
     for root in roots:
@@ -67,10 +75,27 @@ def _chromium_cookie_files(browser: str) -> List[Path]:
             cfg / 'google-chrome-beta',
             home / '.var/app/com.google.Chrome/config/google-chrome',
         ]
+    elif browser == 'vivaldi':
+        roots = [
+            cfg / 'vivaldi',
+            home / '.var/app/com.vivaldi.Vivaldi/config/vivaldi',
+        ]
+    elif browser == 'opera':
+        roots = [
+            cfg / 'opera',
+            cfg / 'opera-developer',
+        ]
+    elif browser == 'edge':
+        roots = [
+            cfg / 'microsoft-edge',
+            cfg / 'microsoft-edge-beta',
+            home / '.var/app/com.microsoft.Edge/config/microsoft-edge',
+        ]
     else:
         roots = [
             cfg / 'chromium',
             home / 'snap/chromium/common/chromium',
+            home / '.var/app/org.chromium.Chromium/config/chromium',
         ]
     files: List[Path] = []
     for root in roots:
@@ -91,6 +116,9 @@ def _get_keyring_secret(browser: str) -> bytes:
         'brave': ('Brave Safe Storage', 'brave'),
         'chrome': ('Chrome Safe Storage', 'chrome'),
         'chromium': ('Chromium Safe Storage', 'chromium'),
+        'vivaldi': ('Vivaldi Safe Storage', 'vivaldi'),
+        'opera': ('Opera Safe Storage', 'opera'),
+        'edge': ('Microsoft Edge Safe Storage', 'microsoft-edge'),
     }.get(browser, ('Chrome Safe Storage',))
     try:
         import secretstorage  # type: ignore
@@ -172,9 +200,9 @@ def _query_sqlite_readonly(db_path: Path, query_fn):
 
 def _browser_order(browser_pref: str) -> Tuple[str, ...]:
     pref = (browser_pref or 'auto').strip().lower()
-    if pref in ('brave', 'firefox', 'chrome'):
+    if pref in ('brave', 'firefox', 'chrome', 'chromium', 'vivaldi', 'opera', 'edge'):
         return (pref,)
-    return ('brave', 'firefox', 'chrome')
+    return ('brave', 'firefox', 'chrome', 'chromium', 'vivaldi', 'opera', 'edge')
 
 
 def _read_firefox_cookies(domain_suffixes: Iterable[str]) -> List[Cookie]:

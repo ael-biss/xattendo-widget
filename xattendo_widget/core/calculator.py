@@ -370,6 +370,8 @@ def build_simulated_local_and_linked(
     p_start, p_end = attendo_period_bounds(cur_dt)
 
     if mode == 'done':
+        n_prior = 4
+        prior_hours = 24.0
         today_net = 6 * 3600 + 42 * 60 + 18
         today_locked = 24 * 60 + 10
         period_net = 30 * 3600 + 24 * 60
@@ -377,6 +379,8 @@ def build_simulated_local_and_linked(
         month_net = 72 * 3600 + 15 * 60
         locked_now = False
     else:
+        n_prior = 3
+        prior_hours = 18.0
         # 2h 06m 11s (2.10h) -> 70% of 3.00h daily average target (12h left / 4 days)
         today_net = 2 * 3600 + 6 * 60 + 11
         today_locked = 32 * 60 + 15
@@ -384,6 +388,10 @@ def build_simulated_local_and_linked(
         week_net = 24 * 3600 + 10 * 60 if mode != 'unlinked' else today_net
         month_net = 68 * 3600 + 24 * 60 if mode != 'unlinked' else today_net
         locked_now = (mode == 'locked')
+
+    if today < p_start + datetime.timedelta(days=n_prior):
+        p_start = today - datetime.timedelta(days=n_prior)
+        p_end = p_start + datetime.timedelta(days=6)
 
     today_gross = today_net + today_locked
     sess_start = ts - today_gross

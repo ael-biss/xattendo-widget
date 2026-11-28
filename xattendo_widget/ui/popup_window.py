@@ -24,7 +24,7 @@ from xattendo_widget.core.calculator import (
 from xattendo_widget.i18n import is_rtl, tr
 from xattendo_widget.models import LinkedAccountsState, LocalTrackerSnapshot
 from xattendo_widget.services.config_service import ConfigService
-from xattendo_widget.ui.ring_widget import CountedDaysBar, DayTimeline
+from xattendo_widget.ui.ring_widget import CountedDaysBar, DayTimeline, HeaderIcon
 from xattendo_widget.ui.styles import apply_rtl_layout, enable_rgba
 
 
@@ -38,6 +38,7 @@ class PopupWindow(Gtk.Window):
         on_refresh: Callable[[], None],
         on_reload: Optional[Callable[[], None]] = None,
         on_quit: Optional[Callable[[], None]] = None,
+        on_open_web_login: Optional[Callable[[str], None]] = None,
     ) -> None:
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.config_service = config_service
@@ -47,6 +48,7 @@ class PopupWindow(Gtk.Window):
         self.on_refresh = on_refresh
         self.on_reload = on_reload
         self.on_quit = on_quit
+        self.on_open_web_login = on_open_web_login
         self._opened_at: float = 0.0
         self._active_page: str = 'overview'
 
@@ -96,13 +98,17 @@ class PopupWindow(Gtk.Window):
         title_col.pack_start(self.sub_lbl, False, False, 0)
         header.pack_start(title_col, True, True, 0)
 
-        self.refresh_icon_btn = Gtk.Button(label='↻')
+        self.refresh_icon = HeaderIcon('refresh', size=15)
+        self.refresh_icon_btn = Gtk.Button()
+        self.refresh_icon_btn.add(self.refresh_icon)
         self.refresh_icon_btn.get_style_context().add_class('xattendo-header-icon-btn')
         self.refresh_icon_btn.set_valign(Gtk.Align.CENTER)
         self.refresh_icon_btn.connect('clicked', lambda *_: self.on_refresh())
         header.pack_end(self.refresh_icon_btn, False, False, 0)
 
-        self.pin_icon_btn = Gtk.Button(label='📌')
+        self.pin_icon = HeaderIcon('pin', size=15)
+        self.pin_icon_btn = Gtk.Button()
+        self.pin_icon_btn.add(self.pin_icon)
         self.pin_icon_btn.get_style_context().add_class('xattendo-header-icon-btn')
         self.pin_icon_btn.set_valign(Gtk.Align.CENTER)
         self.pin_icon_btn.connect('clicked', self._on_pin_clicked)
@@ -166,10 +172,18 @@ class PopupWindow(Gtk.Window):
         hero_top.pack_end(self.hero_ratio_lbl, False, False, 0)
         self.hero_panel.pack_start(hero_top, False, False, 0)
 
+        hero_clock_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.hero_clock = Gtk.Label(label='00:00:00', xalign=0)
         self.hero_clock.set_direction(Gtk.TextDirection.LTR)
         self.hero_clock.get_style_context().add_class('xattendo-hero-clock')
-        self.hero_panel.pack_start(self.hero_clock, False, False, 0)
+        self.hero_eta_badge = Gtk.Label(label='', xalign=1)
+        self.hero_eta_badge.set_direction(Gtk.TextDirection.LTR)
+        self.hero_eta_badge.set_no_show_all(True)
+        self.hero_eta_badge.set_valign(Gtk.Align.CENTER)
+        self.hero_eta_badge.get_style_context().add_class('xattendo-eta-badge')
+        hero_clock_row.pack_start(self.hero_clock, True, True, 0)
+        hero_clock_row.pack_end(self.hero_eta_badge, False, False, 0)
+        self.hero_panel.pack_start(hero_clock_row, False, False, 0)
 
         self.daily_progress = Gtk.ProgressBar()
         self.daily_progress.get_style_context().add_class('xattendo-progress')
@@ -240,7 +254,7 @@ class PopupWindow(Gtk.Window):
         self.intra_link_btn = Gtk.Button(label='Link ↗')
         self.intra_link_btn.get_style_context().add_class('xattendo-link-btn')
         self.intra_link_btn.set_no_show_all(True)
-        self.intra_link_btn.connect('clicked', lambda *_: self.on_open_url(INTRA_PROFILE_URL))
+        self.intra_link_btn.connect('clicked', lambda *_: self._open_link('intra', INTRA_PROFILE_URL))
         intra_top.pack_start(self.intra_title_lbl, True, True, 0)
         intra_top.pack_end(self.intra_link_btn, False, False, 0)
         intra_card.pack_start(intra_top, False, False, 0)
@@ -263,7 +277,7 @@ class PopupWindow(Gtk.Window):
         self.attendo_link_btn = Gtk.Button(label='Link ↗')
         self.attendo_link_btn.get_style_context().add_class('xattendo-link-btn')
         self.attendo_link_btn.set_no_show_all(True)
-        self.attendo_link_btn.connect('clicked', lambda *_: self.on_open_url(ATTENDO_LOGIN_URL))
+        self.attendo_link_btn.connect('clicked', lambda *_: self._open_link('attendo', ATTENDO_LOGIN_URL))
         att_top.pack_start(self.attendo_title_lbl, True, True, 0)
         att_top.pack_end(self.attendo_link_btn, False, False, 0)
         attendo_card.pack_start(att_top, False, False, 0)
@@ -397,6 +411,7 @@ class PopupWindow(Gtk.Window):
                 self.sub_lbl,
                 self.hero_ratio_lbl,
                 self.hero_clock,
+                self.hero_eta_badge,
                 self.timeline_widget,
                 self.cur_sess_val,
                 self.gross_val,
@@ -429,17 +444,37 @@ class PopupWindow(Gtk.Window):
         self.nav_overview_btn.set_label(tr(lang, 'tab_overview'))
         self.nav_sessions_btn.set_label(tr(lang, 'tab_sessions'))
         self.nav_settings_btn.set_label(tr(lang, 'tab_settings'))
+        self.refresh_icon_btn.set_tooltip_text(tr(lang, 'refresh'))
         self._update_pin_button()
+
+    def _open_link(self, target: str, fallback_url: str) -> None:
+        self.hide()
+        if self.on_open_web_login is not None:
+            self.on_open_web_login(target)
+        else:
+            self.on_open_url(fallback_url)
+
+    def contains_screen_point(self, lx: int, ly: int) -> bool:
+        if not self.get_visible():
+            return False
+        gdk_win = self.get_window()
+        if gdk_win is not None:
+            rect = gdk_win.get_frame_extents()
+            return (rect.x <= lx <= rect.x + rect.width) and (rect.y <= ly <= rect.y + rect.height)
+        px, py = self.get_position()
+        pw, ph = self.get_size()
+        return (px <= lx <= px + pw) and (py <= ly <= py + ph)
 
     def _update_pin_button(self) -> None:
         pinned = self.config_service.config.position_locked
         lang = self._lang()
         self.pin_icon_btn.set_tooltip_text(tr(lang, 'unpin_btn' if pinned else 'pin_btn'))
+        self.pin_icon.set_active(pinned)
         ctx = self.pin_icon_btn.get_style_context()
         if pinned:
             ctx.add_class('pinned')
         else:
-            ctx.remove('pinned') if False else ctx.remove_class('pinned')
+            ctx.remove_class('pinned')
 
     def _on_pin_clicked(self, _btn: Gtk.Button) -> None:
         self.config_service.config.position_locked = not self.config_service.config.position_locked
@@ -482,6 +517,7 @@ class PopupWindow(Gtk.Window):
         self,
         local: Optional[LocalTrackerSnapshot],
         linked: Optional[LinkedAccountsState],
+        daily_done_at: Optional[str] = None,
     ) -> None:
         lang = self._lang()
         cfg = self.config_service.config
@@ -538,24 +574,43 @@ class PopupWindow(Gtk.Window):
             self.hero_ratio_lbl.hide()
         self.daily_progress.set_fraction(daily.fraction)
         dp_ctx = self.daily_progress.get_style_context()
+        eta_ctx = self.hero_eta_badge.get_style_context()
+        eta_ts: Optional[float] = None
         if daily.done:
             dp_ctx.add_class('complete')
-            self.pace_lbl.set_markup(f"<span foreground='#34d399'><b>{tr(lang, 'pace_done_text')}</b></span>")
+            eta_ctx.add_class('done')
+            if daily_done_at:
+                self.hero_eta_badge.set_text(tr(lang, 'goal_done_at_badge', time=daily_done_at))
+                done_txt = tr(lang, 'pace_done_at_text', time=daily_done_at)
+            else:
+                self.hero_eta_badge.set_text(tr(lang, 'daily_done_badge'))
+                done_txt = tr(lang, 'pace_done_text')
+            self.hero_eta_badge.show()
+            self.pace_lbl.set_markup(f"<span foreground='#34d399'><b>{done_txt}</b></span>")
         elif locked_now:
             dp_ctx.remove_class('complete')
+            eta_ctx.remove_class('done')
+            self.hero_eta_badge.hide()
             self.pace_lbl.set_markup(
                 tr(lang, 'pace_locked_markup', left=format_hm(daily.remaining_today_seconds))
             )
         else:
             dp_ctx.remove_class('complete')
+            eta_ctx.remove_class('done')
             eta_str = format_eta_clock(local.now_ts, daily.remaining_today_seconds)
+            if daily.daily_target_seconds > 0:
+                self.hero_eta_badge.set_text(tr(lang, 'goal_eta_badge', eta=eta_str))
+                self.hero_eta_badge.show()
+                eta_ts = local.now_ts + daily.remaining_today_seconds
+            else:
+                self.hero_eta_badge.hide()
             self.pace_lbl.set_markup(
                 tr(lang, 'pace_eta_markup', left=format_hm(daily.remaining_today_seconds), eta=eta_str)
             )
 
         # Timeline
         w_start, w_end, segs, now_ts = build_day_active_segments(local)
-        self.timeline_widget.set_timeline(w_start, w_end, segs, now_ts)
+        self.timeline_widget.set_timeline(w_start, w_end, segs, now_ts, eta_ts=eta_ts)
 
         # 3 Inset cards
         self.cur_sess_val.set_text(format_hms(cur_net))

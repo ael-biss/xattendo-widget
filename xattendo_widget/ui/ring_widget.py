@@ -2,7 +2,7 @@
 
 import datetime
 import math
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import cairo
 import gi
@@ -10,6 +10,86 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
 from xattendo_widget.core.calculator import campus_now, campus_zone
+
+
+class HeaderIcon(Gtk.DrawingArea):
+    """Crisp Cairo-rendered header icon ('pin' or 'refresh') tinted by GTK CSS color."""
+
+    def __init__(self, icon_name: str, size: int = 15) -> None:
+        super().__init__()
+        self._icon_name = icon_name
+        self._size = size
+        self._active = False
+        self.set_size_request(size, size)
+        self.connect('draw', self._on_draw)
+
+    def set_active(self, active: bool) -> None:
+        val = bool(active)
+        if val != self._active:
+            self._active = val
+            self.queue_draw()
+
+    def _on_draw(self, _widget, ctx: cairo.Context) -> bool:
+        w = float(self.get_allocated_width())
+        h = float(self.get_allocated_height())
+        dim = min(w, h)
+        if dim <= 2:
+            return False
+
+        rgba = self.get_style_context().get_color(self.get_state_flags())
+        ctx.set_source_rgba(rgba.red, rgba.green, rgba.blue, rgba.alpha)
+        ctx.set_antialias(cairo.ANTIALIAS_BEST)
+        ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+        ctx.set_line_join(cairo.LINE_JOIN_ROUND)
+
+        cx = w / 2.0
+        cy = h / 2.0
+        s = dim / 16.0
+
+        if self._icon_name == 'pin':
+            ctx.save()
+            ctx.translate(cx, cy)
+            if not self._active:
+                ctx.rotate(math.pi / 4.0)
+            ctx.set_line_width(max(1.3, 1.5 * s))
+
+            # Top cap + body + base flange
+            ctx.move_to(-3.0 * s, -5.5 * s)
+            ctx.line_to(3.0 * s, -5.5 * s)
+            ctx.line_to(2.3 * s, -3.5 * s)
+            ctx.line_to(2.3 * s, 0.2 * s)
+            ctx.line_to(4.2 * s, 2.0 * s)
+            ctx.line_to(-4.2 * s, 2.0 * s)
+            ctx.line_to(-2.3 * s, 0.2 * s)
+            ctx.line_to(-2.3 * s, -3.5 * s)
+            ctx.close_path()
+            if self._active:
+                ctx.fill_preserve()
+            ctx.stroke()
+
+            # Needle
+            ctx.move_to(0.0, 2.0 * s)
+            ctx.line_to(0.0, 6.2 * s)
+            ctx.stroke()
+            ctx.restore()
+            return False
+
+        # 'refresh' circular arrow
+        r = 5.2 * s
+        ctx.set_line_width(max(1.3, 1.55 * s))
+        start_a = -math.pi * 0.82
+        end_a = math.pi * 0.68
+        ctx.arc(cx, cy, r, start_a, end_a)
+        ctx.stroke()
+
+        # Arrowhead at start_a (pointing clockwise)
+        ax = cx + r * math.cos(start_a)
+        ay = cy + r * math.sin(start_a)
+        ctx.move_to(ax - 2.6 * s, ay - 2.2 * s)
+        ctx.line_to(ax + 0.6 * s, ay + 0.2 * s)
+        ctx.line_to(ax - 2.8 * s, ay + 1.8 * s)
+        ctx.stroke()
+        return False
 
 
 class ProgressRing(Gtk.DrawingArea):
@@ -110,6 +190,7 @@ class DayTimeline(Gtk.DrawingArea):
         self._win_end: float = 1.0
         self._segments: List[Tuple[float, float]] = []
         self._now_ts: float = 0.0
+        self._eta_ts: Optional[float] = None
         self.set_size_request(-1, 40)
         self.connect('draw', self._on_draw)
 
@@ -119,11 +200,13 @@ class DayTimeline(Gtk.DrawingArea):
         win_end: float,
         segments: List[Tuple[float, float]],
         now_ts: float,
+        eta_ts: Optional[float] = None,
     ) -> None:
         self._win_start = float(win_start)
         self._win_end = max(float(win_start) + 1.0, float(win_end))
         self._segments = list(segments)
         self._now_ts = float(now_ts)
+        self._eta_ts = float(eta_ts) if eta_ts is not None else None
         self.queue_draw()
 
     def _on_draw(self, _widget, ctx: cairo.Context) -> bool:
@@ -158,6 +241,22 @@ class DayTimeline(Gtk.DrawingArea):
             ctx.set_source_rgb(0.204, 0.827, 0.600)  # #34d399
             ctx.rectangle(nx - 1.0, 0.0, 2.0, bar_h)
             ctx.fill()
+
+        # Subtle dashed emerald 'ETA' goal marker
+        if self._eta_ts is not None and self._win_start <= self._eta_ts <= self._win_end:
+            ex = ((self._eta_ts - self._win_start) / span) * w
+            ex = max(2.0, min(w - 2.0, ex))
+            ctx.save()
+            ctx.set_source_rgba(0.204, 0.827, 0.600, 0.85)
+            ctx.set_line_width(1.5)
+            ctx.set_dash([3.0, 2.5])
+            ctx.move_to(ex, 0.0)
+            ctx.line_to(ex, bar_h)
+            ctx.stroke()
+            ctx.set_dash([])
+            ctx.arc(ex, 2.5, 2.2, 0.0, 2.0 * math.pi)
+            ctx.fill()
+            ctx.restore()
 
         # Time tick labels
         zone = campus_zone()

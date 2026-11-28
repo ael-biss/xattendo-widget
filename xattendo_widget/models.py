@@ -32,6 +32,7 @@ class UserConfig:
     top_bar_mode: bool = True
     top_bar_x: Optional[int] = None
     position_locked: bool = False
+    show_pill_eta: bool = True
     language: str = 'en'
 
     def to_dict(self) -> dict:
@@ -52,6 +53,7 @@ class UserConfig:
             'topBarMode': self.top_bar_mode,
             'topBarX': self.top_bar_x,
             'positionLocked': self.position_locked,
+            'showPillEta': self.show_pill_eta,
             'language': normalize_lang(self.language),
         }
 
@@ -104,6 +106,7 @@ class UserConfig:
             top_bar_mode=bool(data.get('topBarMode', True)),
             top_bar_x=tbx if isinstance(tbx, int) else None,
             position_locked=bool(data.get('positionLocked', False)),
+            show_pill_eta=bool(data.get('showPillEta', True)),
             language=normalize_lang(data.get('language', 'en')),
         )
 

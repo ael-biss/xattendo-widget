@@ -16,9 +16,11 @@ from xattendo_widget.constants import APP_NAME
 from xattendo_widget.core.calculator import (
     build_simulated_local_and_linked,
     calculate_daily_average_target,
+    campus_now,
     campus_today,
     compute_effective_today_metrics,
     format_compact_hours,
+    format_eta_clock,
     format_hms,
     merge_period_progress,
 )
@@ -40,6 +42,7 @@ from xattendo_widget.ui.popup_window import PopupWindow
 from xattendo_widget.ui.ring_widget import ProgressRing
 from xattendo_widget.ui.settings_window import SettingsWindow
 from xattendo_widget.ui.styles import apply_rtl_layout, enable_rgba
+from xattendo_widget.ui.web_login_window import WebLoginWindow
 
 
 class PillWindow(Gtk.Window):
@@ -79,6 +82,8 @@ class PillWindow(Gtk.Window):
         self.triggered_events: Set[str] = set(initial_triggered_events) if initial_triggered_events else set()
         self._last_poll_mono: float = 0.0
         self._last_campus_day: datetime.date = campus_today()
+        self._daily_done_at_str: Optional[str] = None
+        self._was_daily_done: Optional[bool] = None
 
         self._pos_x: int = 0
         self._pos_y: int = 0
@@ -151,6 +156,17 @@ class PillWindow(Gtk.Window):
         self.time_lbl.get_style_context().add_class('xattendo-pill-time')
         self.pill.pack_start(self.time_lbl, False, False, 0)
 
+        self.eta_lbl = Gtk.Label(label='')
+        self.eta_lbl.set_direction(Gtk.TextDirection.LTR)
+        self.eta_lbl.get_style_context().add_class('xattendo-pill-eta')
+        self.eta_lbl.set_no_show_all(True)
+        self.pill.pack_start(self.eta_lbl, False, False, 0)
+
+        self.web_login_win = WebLoginWindow(
+            config_service=self.config_service,
+            on_credentials_captured=self._on_web_credentials_captured,
+            on_open_external=self.system_service.open_url,
+        )
         self.settings_win = SettingsWindow(
             config_service=self.config_service,
             update_service=self.update_service,
@@ -161,6 +177,8 @@ class PillWindow(Gtk.Window):
             on_top_bar_preset=self.apply_top_bar_preset,
             on_reload_app=self.reload_app,
             on_quit_app=self.quit_app,
+            on_open_web_login=self.web_login_win.open_login,
+            is_child_modal_open=self.web_login_win.get_visible,
         )
         self.history_win = HistoryWindow(
             config_service=self.config_service,
@@ -174,6 +192,7 @@ class PillWindow(Gtk.Window):
             on_refresh=self.sync_accounts,
             on_reload=self.reload_app,
             on_quit=self.quit_app,
+            on_open_web_login=self.web_login_win.open_login,
         )
 
         self.connect('size-allocate', self._on_size_allocate)
@@ -194,7 +213,11 @@ class PillWindow(Gtk.Window):
                     GLib.idle_add(self.on_top_bar_mode_changed, False)
 
         self.show_all()
-        apply_rtl_layout(self, is_rtl(self.config_service.config.language), ltr_widgets=(self.time_lbl,))
+        apply_rtl_layout(
+            self,
+            is_rtl(self.config_service.config.language),
+            ltr_widgets=(self.time_lbl, self.eta_lbl),
+        )
         GLib.idle_add(self._apply_initial_position)
 
         if self.simulate:
@@ -228,10 +251,16 @@ class PillWindow(Gtk.Window):
             except Exception:
                 pass
         self.config_service.unsubscribe(self._on_config_changed)
+        self.web_login_win.destroy()
         self.popup_win.destroy()
         self.history_win.destroy()
         self.settings_win.destroy()
         self.destroy()
+
+    def _on_web_credentials_captured(self, _attendo_token: str, _intra_cookie: str) -> None:
+        self.settings_win.sync_captured_credentials()
+        self._syncing = False
+        self.sync_accounts()
 
     def _schedule_account_sync(self) -> None:
         if self._sync_source_id is not None:
@@ -303,7 +332,8 @@ class PillWindow(Gtk.Window):
             self._raw_dragging = False
             self._raw_drag_button = 0
             self._dragging = False
-        apply_rtl_layout(self, is_rtl(cfg.language), ltr_widgets=(self.time_lbl,))
+        apply_rtl_layout(self, is_rtl(cfg.language), ltr_widgets=(self.time_lbl, self.eta_lbl))
+        self.web_login_win.apply_language(cfg.language)
         self.popup_win.apply_language(cfg.language)
         self.history_win.apply_language(cfg.language)
         self._schedule_account_sync()
@@ -434,14 +464,18 @@ class PillWindow(Gtk.Window):
 
     def _on_raw_button_press(self, button: int, rx_px: int, ry_px: int) -> None:
         lx, ly = self._x11_to_logical(rx_px, ry_px)
-        geo, panel_h = self._get_monitor_metrics()
-        in_top_bar = geo.y <= ly <= geo.y + panel_h
-        if in_top_bar and self.settings_win.get_visible() and not self.settings_win.is_modal_open:
-            self.settings_win.close_window()
-            return
-        if in_top_bar and self.popup_win.get_visible() and not self._hit_test_top_bar(lx, ly):
-            self.popup_win.hide()
-            return
+        if self.settings_win.get_visible() and not self.settings_win.is_modal_open:
+            if (time.monotonic() - self.settings_win._opened_at) >= 0.20 and not self.settings_win.contains_screen_point(lx, ly):
+                self.settings_win.close_window()
+                return
+        if self.popup_win.get_visible():
+            if (
+                (time.monotonic() - self.popup_win._opened_at) >= 0.20
+                and not self.popup_win.contains_screen_point(lx, ly)
+                and not self._hit_test_top_bar(lx, ly)
+            ):
+                self.popup_win.hide()
+                return
         if not self._hit_test_top_bar(lx, ly):
             return
         if button == 2 and self.config_service.config.position_locked:
@@ -632,9 +666,24 @@ class PillWindow(Gtk.Window):
                 key = f'{today_iso}-daily-done'
                 if key not in self.triggered_events:
                     self.triggered_events.add(key)
+                    if self._daily_done_at_str:
+                        body = tr(
+                            lang,
+                            'notif_daily_done_body_at',
+                            target=daily_target_str,
+                            time=self._daily_done_at_str,
+                            logged=format_compact_hours(today_net),
+                        )
+                    else:
+                        body = tr(
+                            lang,
+                            'notif_daily_done_body',
+                            target=daily_target_str,
+                            logged=format_compact_hours(today_net),
+                        )
                     self.system_service.notify(
                         tr(lang, 'notif_daily_done_title'),
-                        tr(lang, 'notif_daily_done_body', target=daily_target_str, logged=format_compact_hours(today_net)),
+                        body,
                         enabled=cfg.notifications_enabled,
                     )
             elif not daily.done and cfg.almost_goal_enabled:
@@ -684,6 +733,8 @@ class PillWindow(Gtk.Window):
         today = campus_today()
         if today != self._last_campus_day:
             self._last_campus_day = today
+            self._daily_done_at_str = None
+            self._was_daily_done = None
             self.triggered_events.clear()
             self.sync_accounts()
 
@@ -739,10 +790,38 @@ class PillWindow(Gtk.Window):
         else:
             self.time_lbl.set_text(format_hms(today_net))
 
+        # Track live daily-goal completion timestamp and display finish time on pill
+        if self._was_daily_done is False and daily.done:
+            self._daily_done_at_str = campus_now().strftime('%H:%M')
+        elif not daily.done:
+            self._daily_done_at_str = None
+        self._was_daily_done = daily.done
+
+        if cfg.show_pill_eta and not daily.done and not locked_now and daily.daily_target_seconds > 0:
+            eta_str = format_eta_clock(local.now_ts, daily.remaining_today_seconds)
+            self.eta_lbl.set_text(f'→ {eta_str}')
+            self.eta_lbl.show()
+            self.pill.set_tooltip_text(
+                f"{format_compact_hours(today_net)} / {format_compact_hours(daily.daily_target_seconds)} · {tr(lang, 'goal_eta_badge', eta=eta_str)}"
+            )
+        elif cfg.show_pill_eta and daily.done and self._daily_done_at_str:
+            self.eta_lbl.set_text(f'✓ {self._daily_done_at_str}')
+            self.eta_lbl.show()
+            self.pill.set_tooltip_text(tr(lang, 'pace_done_at_text', time=self._daily_done_at_str))
+        else:
+            self.eta_lbl.hide()
+            if daily.done:
+                self.pill.set_tooltip_text(tr(lang, 'pace_done_text'))
+            elif daily.daily_target_seconds > 0:
+                eta_str = format_eta_clock(local.now_ts, daily.remaining_today_seconds)
+                self.pill.set_tooltip_text(
+                    f"{format_compact_hours(today_net)} / {format_compact_hours(daily.daily_target_seconds)} · {tr(lang, 'goal_eta_badge', eta=eta_str)}"
+                )
+
         self._check_notifications(daily, today_net, p_net, target_h, p_start)
 
         if self.popup_win.get_visible():
-            self.popup_win.update_content(local, self.linked_state)
+            self.popup_win.update_content(local, self.linked_state, daily_done_at=self._daily_done_at_str)
         if self.history_win.get_visible():
             self.history_win.update_data(local, self.linked_state)
 
